@@ -71,7 +71,8 @@ class CreateProductDto extends ProductDto {
 
 class PriceItemDto {
   @IsString() priceTypeId: string;
-  @IsNumber() @Min(0) price: number;
+  /** null — убрать цену этого типа */
+  @IsOptional() @IsNumber() @Min(0) price: number | null;
 }
 
 class PricesDto {
@@ -178,11 +179,13 @@ export class CatalogAdminController {
   async setPrices(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: PricesDto) {
     await this.prisma.$transaction(
       dto.items.map((i) =>
-        this.prisma.price.upsert({
-          where: { productId_priceTypeId: { productId: id, priceTypeId: i.priceTypeId } },
-          create: { productId: id, priceTypeId: i.priceTypeId, price: i.price },
-          update: { price: i.price },
-        }),
+        i.price == null
+          ? this.prisma.price.deleteMany({ where: { productId: id, priceTypeId: i.priceTypeId } })
+          : this.prisma.price.upsert({
+              where: { productId_priceTypeId: { productId: id, priceTypeId: i.priceTypeId } },
+              create: { productId: id, priceTypeId: i.priceTypeId, price: i.price },
+              update: { price: i.price },
+            }),
       ),
     );
     await this.audit.log(user.id, 'product.prices', 'Product', id, dto.items as unknown as object);

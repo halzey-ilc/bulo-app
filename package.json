@@ -5,6 +5,7 @@
   "description": "BULO — приложение для заказов выпечки: мобильное приложение, веб-панель и API",
   "workspaces": [
     "apps/api",
+    "apps/admin",
     "packages/*"
   ],
   "scripts": {

@@ -4,7 +4,7 @@ import * as bcrypt from 'bcryptjs';
 import { normalizePhone } from '../auth/phone';
 import { AuditService } from '../common/audit.service';
 import { AuthUser } from '../common/auth-user';
-import { localNow, toDbDate } from '../common/dates';
+import { fromDbDate, localNow, toDbDate } from '../common/dates';
 import { NotificationsService } from '../common/notifications.service';
 import { PrismaService } from '../common/prisma.service';
 import type { CreatePartnerDto, CreateUserDto, PartnerDto, UpdateUserDto } from './admin.dto';
@@ -80,7 +80,7 @@ export class AdminService {
     return {
       ...p,
       counterparty,
-      orders: p.orders.map((o) => ({ ...o, total: Number(o.total) })),
+      orders: p.orders.map((o) => ({ ...o, deliveryDate: fromDbDate(o.deliveryDate), total: Number(o.total) })),
     };
   }
 

@@ -4,7 +4,10 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { cors: true });
+  const app = await NestFactory.create(AppModule, {
+    // имя файла Excel-выгрузки браузер читает из Content-Disposition
+    cors: { exposedHeaders: ['Content-Disposition'] },
+  });
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, transform: true, forbidUnknownValues: false }),

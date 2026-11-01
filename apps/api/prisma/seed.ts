@@ -133,6 +133,12 @@ async function main() {
     }
   }
 
+  await prisma.oneCCounterparty.upsert({
+    where: { oneCId: 'demo-cp-1' },
+    create: { oneCId: 'demo-cp-1', name: 'Кофейня «Утро»', inn: '01234567890123', address: 'г. Бишкек, ул. Киевская, 95' },
+    update: {},
+  });
+
   const partner = await prisma.partner.upsert({
     where: { oneCId: 'demo-cp-1' },
     create: {

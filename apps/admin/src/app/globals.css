@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme {
+  --color-mango: #e94f15;
+  --color-mango-dark: #c94110;
+  --color-mango-soft: #fde3d6;
+  --color-coffee: #70171f;
+  --color-coffee-soft: #f6e0df;
+  --color-cambodia: #26422b;
+  --color-cambodia-soft: #e0ebe1;
+  --color-ice: #cde4f8;
+  --color-butter: #f9edb3;
+  --color-oat: #f9f5e6;
+  --color-oat-dark: #f1ead3;
+  --color-line: #ebe4cc;
+  --color-muted: #6f7d71;
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+}
+
+html,
+body {
+  background: var(--color-oat);
+  color: var(--color-cambodia);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-butter);
+}
+
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+.print-only {
+  display: none;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block;
+  }
+  .print-page {
+    break-after: page;
+    page-break-after: always;
+  }
+  .print-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  .print-plain {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+    border-radius: 0 !important;
+  }
+  .print-main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

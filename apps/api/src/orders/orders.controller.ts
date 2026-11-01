@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { OrderStatus } from '@prisma/client';
 import { AuthUser } from '../common/auth-user';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Public, Roles } from '../common/decorators';
 import { SettingsService } from '../common/settings.service';
 import { CreateOrderDto, StatusDto, UpdateItemsDto } from './order-dto';
 import { earliestDeliveryDate } from './order-rules';
@@ -16,6 +16,7 @@ export class OrdersController {
 
   /** Правила оформления для корзины: ближайшая дата, отсечка, минимальная сумма. */
   @Get('rules')
+  @Public()
   async rules() {
     const s = await this.settings.get();
     return {

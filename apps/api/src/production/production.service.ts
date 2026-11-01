@@ -72,11 +72,19 @@ export class ProductionService {
         include: { _count: { select: { orders: true } } },
       }),
     ]);
-    const awaitingPayment = await this.prisma.order.count({ where: { deliveryDate: day, status: 'APPROVED' } });
+    const [awaitingPayment, inWork] = await Promise.all([
+      this.prisma.order.count({ where: { deliveryDate: day, status: 'APPROVED' } }),
+      this.prisma.order.findMany({
+        where: { deliveryDate: day, status: { in: ['PAID', 'IN_PRODUCTION', 'READY'] } },
+        include: lineInclude,
+      }),
+    ]);
     return {
       date,
       awaitingPayment,
       pending: { orders: pending.map(orderBrief), groups: aggregateForProduction(toLines(pending)) },
+      /** Всё, что печётся на дату: и ещё не переданное в цех, и уже по накладным */
+      total: { orders: inWork.length, groups: aggregateForProduction(toLines(inWork)) },
       sheets: sheets.map((s) => ({ ...s, date: fromDbDate(s.date), ordersCount: s._count.orders })),
     };
   }

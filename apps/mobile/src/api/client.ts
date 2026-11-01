@@ -1,8 +1,18 @@
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
+
 /**
- * Адрес API. На реальном телефоне localhost — это сам телефон, поэтому
- * задайте EXPO_PUBLIC_API_URL=http://<LAN-IP компьютера>:4000/api (см. README).
+ * Адрес API. Если EXPO_PUBLIC_API_URL не задан, в разработке берём хост, с которого
+ * загружено приложение (Expo Go на телефоне — IP компьютера, эмулятор Android — 10.0.2.2),
+ * и порт API 4000. В браузере — localhost.
  */
-export const API_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4000/api').replace(/\/$/, '');
+function devApiUrl(): string {
+  const host = Constants.expoConfig?.hostUri?.split(':')[0];
+  if (Platform.OS !== 'web' && host) return `http://${host}:4000/api`;
+  return 'http://localhost:4000/api';
+}
+
+export const API_URL = (process.env.EXPO_PUBLIC_API_URL || devApiUrl()).replace(/\/$/, '');
 
 export class ApiError extends Error {
   constructor(

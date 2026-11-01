@@ -53,7 +53,13 @@ cd apps/mobile && npm install && npx expo start
 
 `SEED_DEMO=true` добавляет демо-каталог, партнёра «Кофейня «Утро»» (+996700111111) и сотрудников всех ролей. При `SMS_PROVIDER=console` и `DEV_RETURN_OTP=true` код из СМС пишется в лог API и возвращается в ответе — можно входить без настоящих СМС.
 
-На телефоне с Expo Go в `apps/mobile/.env` укажите адрес компьютера в локальной сети: `EXPO_PUBLIC_API_URL=http://192.168.x.x:4000/api`.
+Приложение само находит API на том же компьютере, где запущен `expo start` (порт 4000): в Expo Go на телефоне, в эмуляторе Android и в браузере. Задавать `EXPO_PUBLIC_API_URL` нужно только для другого сервера.
+
+**Эмулятор Android** (Windows): виртуальный телефон `BULO_Pixel` с Expo Go. После `npx expo start` в `apps/mobile` запустите в PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File \\wsl.localhost\ubuntu\home\user\bulo-app\scripts\android-emulator.ps1
+```
 
 ## Тесты
 

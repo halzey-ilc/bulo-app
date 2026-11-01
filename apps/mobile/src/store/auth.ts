@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Auth, AuthResponse, setToken, setUnauthorizedHandler, User } from '../api';
 import { secureStorage } from '../lib/storage';
-import { OFFICE_ROLES, Role } from '../shared';
+import { Role } from '../shared';
 
 const TOKEN_KEY = 'bulo.token';
 
@@ -66,15 +66,20 @@ setUnauthorizedHandler(() => {
   void useAuth.getState().signOut();
 });
 
-export type Persona = 'anon' | 'buyer' | 'courier' | 'workshop' | 'office';
+export type Persona = 'anon' | 'buyer' | 'courier' | 'workshop' | 'admin' | 'manager' | 'accountant';
 
+/** Партнёр, гость и клиент — «покупатели»; у каждой офисной роли свой набор вкладок. */
 export function personaOf(role: Role | undefined | null): Persona {
   if (!role) return 'anon';
   if (role === 'COURIER') return 'courier';
   if (role === 'WORKSHOP') return 'workshop';
-  if (OFFICE_ROLES.includes(role)) return 'office';
+  if (role === 'ADMIN') return 'admin';
+  if (role === 'MANAGER') return 'manager';
+  if (role === 'ACCOUNTANT') return 'accountant';
   return 'buyer';
 }
+
+export const isOffice = (p: Persona) => p === 'admin' || p === 'manager' || p === 'accountant';
 
 /** Набор и порядок вкладок для каждой роли. */
 export const TABS: Record<Persona, string[]> = {
@@ -82,7 +87,9 @@ export const TABS: Record<Persona, string[]> = {
   buyer: ['index', 'catalog', 'cart', 'orders', 'profile'],
   courier: ['deliveries', 'profile'],
   workshop: ['workshop', 'orders', 'profile'],
-  office: ['orders', 'catalog', 'profile'],
+  admin: ['dashboard', 'orders', 'people', 'catalog', 'profile'],
+  manager: ['dashboard', 'orders', 'people', 'catalog', 'profile'],
+  accountant: ['dashboard', 'payments', 'reports', 'profile'],
 };
 
 export const HOME_HREF = {
@@ -90,7 +97,9 @@ export const HOME_HREF = {
   buyer: '/',
   courier: '/deliveries',
   workshop: '/workshop',
-  office: '/orders',
+  admin: '/dashboard',
+  manager: '/dashboard',
+  accountant: '/dashboard',
 } as const satisfies Record<Persona, string>;
 
 export function usePersona(): Persona {

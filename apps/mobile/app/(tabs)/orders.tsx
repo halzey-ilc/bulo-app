@@ -9,7 +9,7 @@ import { OrderCard, OrderCardSkeleton } from '../../src/components/order';
 import { Button, Chip, EmptyState, ErrorState, T } from '../../src/components/ui';
 import { actionKind, runOrderAction } from '../../src/lib/orderActions';
 import { useLoad } from '../../src/lib/useLoad';
-import { useAuth, usePersona } from '../../src/store/auth';
+import { isOffice, useAuth, usePersona } from '../../src/store/auth';
 import { ACTION_LABELS, allowedTransitions, OrderStatus, Role } from '../../src/shared';
 import { colors, fonts, radius, space } from '../../src/theme';
 
@@ -69,7 +69,7 @@ export default function OrdersScreen() {
           {persona === 'buyer' ? 'История и статусы доставок' : persona === 'workshop' ? 'Что сейчас в работе у цеха' : 'Быстрые действия с телефона'}
         </T>
       </View>
-      {persona === 'office' && (
+      {isOffice(persona) && (
         <View style={styles.hint}>
           <Icon name="info" size={18} color={colors.blueberry} />
           <T v="small" color={colors.blueberry} style={{ flex: 1, fontFamily: fonts.semibold }}>

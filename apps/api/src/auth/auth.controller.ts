@@ -5,6 +5,7 @@ import { PrismaService } from '../common/prisma.service';
 import { AuthService } from './auth.service';
 import {
   AddressDto,
+  ChangePasswordDto,
   PasswordLoginDto,
   PushTokenDto,
   RegisterPartnerDto,
@@ -64,6 +65,11 @@ export class AuthController {
     return this.auth.changePhone(user, dto.phone, dto.code);
   }
 
+  @Post('me/password')
+  changePassword(@CurrentUser() user: AuthUser, @Body() dto: ChangePasswordDto) {
+    return this.auth.changePassword(user, dto.currentPassword, dto.newPassword);
+  }
+
   @Post('push-token')
   async pushToken(@CurrentUser() user: AuthUser, @Body() dto: PushTokenDto) {
     await this.prisma.pushToken.upsert({
@@ -83,7 +89,7 @@ export class AuthController {
 
 /** Адреса доставки партнёра. */
 @Controller('me/addresses')
-@Roles('PARTNER', 'GUEST')
+@Roles('PARTNER', 'GUEST', 'CLIENT')
 export class AddressesController {
   constructor(private readonly prisma: PrismaService) {}
 

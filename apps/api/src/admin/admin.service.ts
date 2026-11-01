@@ -183,8 +183,28 @@ export class AdminService {
     if (login && (await this.prisma.user.findUnique({ where: { login } }))) {
       throw new ConflictException('Логин занят');
     }
-    if ((dto.role === 'PARTNER' || dto.canOrder) && !dto.partnerId) {
+    if ((dto.role === 'PARTNER' || (dto.role === 'GUEST' && dto.canOrder)) && !dto.partnerId) {
       throw new BadRequestException('Для партнёра и гостя с заказами выберите контрагента');
+    }
+    // Клиенту (розничному покупателю) заводим личного контрагента, если админ не выбрал существующего
+    let partnerId = dto.partnerId;
+    if (dto.role === 'CLIENT' && !partnerId) {
+      const retail = await this.prisma.priceType.findFirst({
+        where: { name: { equals: 'Розничная', mode: 'insensitive' } },
+      });
+      const personal = await this.prisma.partner.create({
+        data: {
+          name: dto.name,
+          contactName: dto.name,
+          phone: phone ?? '',
+          email: dto.email,
+          status: 'APPROVED',
+          approvedAt: new Date(),
+          priceTypeId: retail?.id,
+          note: 'Личный кабинет клиента',
+        },
+      });
+      partnerId = personal.id;
     }
     const user = await this.prisma.user.create({
       data: {
@@ -196,7 +216,7 @@ export class AdminService {
         email: dto.email,
         accessExpiresAt: dto.accessExpiresAt ? new Date(dto.accessExpiresAt) : null,
         canOrder: dto.canOrder ?? false,
-        partnerId: dto.partnerId,
+        partnerId,
       },
       select: userSelect,
     });

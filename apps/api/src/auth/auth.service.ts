@@ -114,6 +114,21 @@ export class AuthService {
     return publicUser(updated);
   }
 
+  /** Смена своего пароля. Остальные сессии пользователя завершаются, текущей выдаётся новый токен. */
+  async changePassword(user: AuthUser, current: string | undefined, next: string) {
+    if (user.passwordHash && !(current && (await bcrypt.compare(current, user.passwordHash)))) {
+      throw new BadRequestException('Текущий пароль указан неверно');
+    }
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: await bcrypt.hash(next, 10), tokenVersion: { increment: 1 } },
+      include: { partner: true },
+    });
+    await this.audit.log(user.id, 'user.change_password', 'User', user.id);
+    const token = await this.jwt.signAsync({ sub: updated.id, v: updated.tokenVersion });
+    return { token, user: publicUser(updated) };
+  }
+
   private assertCanLogin(user: AuthUser) {
     if (user.status !== 'ACTIVE') throw new ForbiddenException('Учётная запись заблокирована');
     if (user.accessExpiresAt && user.accessExpiresAt < new Date()) {

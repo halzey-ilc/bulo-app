@@ -15,6 +15,10 @@ export const TAB_META: Record<string, { icon: IconName; label: string }> = {
   deliveries: { icon: 'truck', label: 'Доставки' },
   workshop: { icon: 'chef', label: 'Цех' },
   profile: { icon: 'user', label: 'Профиль' },
+  dashboard: { icon: 'sparkle', label: 'Пульт' },
+  people: { icon: 'shop', label: 'Люди' },
+  payments: { icon: 'card', label: 'Оплаты' },
+  reports: { icon: 'star', label: 'Отчёты' },
 };
 
 /**

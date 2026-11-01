@@ -9,7 +9,7 @@ import { Screen } from '../../src/components/layout';
 import { Logo } from '../../src/components/Logo';
 import { Button, Card, Divider, Row, T } from '../../src/components/ui';
 import { formatPhone } from '../../src/lib/format';
-import { useAuth, usePersona } from '../../src/store/auth';
+import { isOffice, useAuth, usePersona } from '../../src/store/auth';
 import { confirmDialog } from '../../src/store/ui';
 import { PARTNER_STATUS_LABELS, ROLE_LABELS } from '../../src/shared';
 import { colors, fonts, radius, shadows, space } from '../../src/theme';
@@ -85,7 +85,7 @@ export default function Profile() {
         </Card>
       )}
 
-      {persona === 'office' && (
+      {isOffice(persona) && (
         <View style={styles.hint}>
           <Icon name="info" size={18} color={colors.blueberry} />
           <T v="small" color={colors.blueberry} style={{ flex: 1, fontFamily: fonts.semibold }}>

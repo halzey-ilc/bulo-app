@@ -10,7 +10,7 @@ const TRANSITIONS: Record<OrderStatus, Partial<Record<OrderStatus, Role[]>>> = {
   NEW: {
     APPROVED: ['ADMIN', 'MANAGER'],
     REJECTED: ['ADMIN', 'MANAGER'],
-    CANCELLED: ['ADMIN', 'MANAGER', 'PARTNER', 'GUEST'],
+    CANCELLED: ['ADMIN', 'MANAGER', 'PARTNER', 'GUEST', 'CLIENT'],
   },
   APPROVED: {
     PAID: ['ADMIN', 'ACCOUNTANT'],

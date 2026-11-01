@@ -16,6 +16,9 @@ export default function TabsLayout() {
       screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.bg } }}
       tabBar={(props) => <TabBar {...props} order={tabs} profileLabel={persona === 'anon' ? 'Войти' : 'Профиль'} />}
     >
+      <Tabs.Protected guard={has('dashboard')}>
+        <Tabs.Screen name="dashboard" />
+      </Tabs.Protected>
       <Tabs.Protected guard={has('index')}>
         <Tabs.Screen name="index" />
       </Tabs.Protected>
@@ -25,8 +28,17 @@ export default function TabsLayout() {
       <Tabs.Protected guard={has('workshop')}>
         <Tabs.Screen name="workshop" />
       </Tabs.Protected>
+      <Tabs.Protected guard={has('payments')}>
+        <Tabs.Screen name="payments" />
+      </Tabs.Protected>
       <Tabs.Protected guard={has('orders')}>
         <Tabs.Screen name="orders" />
+      </Tabs.Protected>
+      <Tabs.Protected guard={has('people')}>
+        <Tabs.Screen name="people" />
+      </Tabs.Protected>
+      <Tabs.Protected guard={has('reports')}>
+        <Tabs.Screen name="reports" />
       </Tabs.Protected>
       <Tabs.Protected guard={has('catalog')}>
         <Tabs.Screen name="catalog" />

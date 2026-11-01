@@ -62,6 +62,18 @@ export class UpdateMeDto {
   email?: string;
 }
 
+export class ChangePasswordDto {
+  /** Текущий пароль — обязателен, если пароль уже был задан */
+  @IsOptional()
+  @IsString()
+  currentPassword?: string;
+
+  @IsString()
+  @MinLength(6, { message: 'Пароль — минимум 6 символов' })
+  @MaxLength(100)
+  newPassword: string;
+}
+
 export class PushTokenDto {
   @IsString()
   token: string;

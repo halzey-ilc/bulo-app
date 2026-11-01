@@ -47,6 +47,12 @@ async function main() {
     create: { oneCId: 'demo-wholesale', name: 'Оптовая', isDefault: false },
     update: {},
   });
+  // Розничные цены — для клиентов-покупателей (личные кабинеты создаёт админ)
+  const retail = await prisma.priceType.upsert({
+    where: { oneCId: 'demo-retail' },
+    create: { oneCId: 'demo-retail', name: 'Розничная', isDefault: false },
+    update: {},
+  });
 
   if (process.env.SEED_DEMO !== 'true') return;
 
@@ -130,6 +136,11 @@ async function main() {
         create: { productId: p.id, priceTypeId: wholesale.id, price: Math.round(price * 0.9) },
         update: {},
       });
+      await prisma.price.upsert({
+        where: { productId_priceTypeId: { productId: p.id, priceTypeId: retail.id } },
+        create: { productId: p.id, priceTypeId: retail.id, price: Math.round(price * 1.2) },
+        update: {},
+      });
     }
   }
 
@@ -155,15 +166,38 @@ async function main() {
     update: {},
   });
 
-  const demoUsers: { phone: string; name: string; role: Role; partnerId?: string }[] = [
-    { phone: '+996700111111', name: 'Айгерим (партнёр)', role: 'PARTNER', partnerId: partner.id },
-    { phone: '+996700222222', name: 'Менеджер', role: 'MANAGER' },
-    { phone: '+996700333333', name: 'Бухгалтер', role: 'ACCOUNTANT' },
-    { phone: '+996700444444', name: 'Цех', role: 'WORKSHOP' },
-    { phone: '+996700555555', name: 'Курьер', role: 'COURIER' },
+  const client = await prisma.partner.upsert({
+    where: { oneCId: 'demo-client-1' },
+    create: {
+      oneCId: 'demo-client-1',
+      name: 'Жаныл Асанова',
+      contactName: 'Жаныл Асанова',
+      phone: '+996700666666',
+      status: 'APPROVED',
+      approvedAt: new Date(),
+      priceTypeId: retail.id,
+      note: 'Личный кабинет клиента',
+      addresses: { create: { address: 'г. Бишкек, мкр. Асанбай, 12', isDefault: true } },
+    },
+    update: {},
+  });
+
+  // Демо-учётки: вход по телефону (код из СМС) или по логину и общему паролю
+  const demoPassword = await bcrypt.hash('bulo2026', 10);
+  const demoUsers: { phone: string; login: string; name: string; role: Role; partnerId?: string }[] = [
+    { phone: '+996700111111', login: 'partner', name: 'Айгерим (партнёр)', role: 'PARTNER', partnerId: partner.id },
+    { phone: '+996700222222', login: 'manager', name: 'Менеджер', role: 'MANAGER' },
+    { phone: '+996700333333', login: 'accountant', name: 'Бухгалтер', role: 'ACCOUNTANT' },
+    { phone: '+996700444444', login: 'workshop', name: 'Цех', role: 'WORKSHOP' },
+    { phone: '+996700555555', login: 'courier', name: 'Курьер', role: 'COURIER' },
+    { phone: '+996700666666', login: 'client', name: 'Жаныл', role: 'CLIENT', partnerId: client.id },
   ];
   for (const u of demoUsers) {
-    await prisma.user.upsert({ where: { phone: u.phone }, create: u, update: {} });
+    await prisma.user.upsert({
+      where: { phone: u.phone },
+      create: { ...u, passwordHash: demoPassword },
+      update: { login: u.login, passwordHash: demoPassword },
+    });
   }
   await prisma.user.upsert({
     where: { login: 'guest' },

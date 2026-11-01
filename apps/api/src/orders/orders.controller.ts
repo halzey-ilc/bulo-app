@@ -27,7 +27,7 @@ export class OrdersController {
   }
 
   @Post()
-  @Roles('PARTNER', 'GUEST')
+  @Roles('PARTNER', 'GUEST', 'CLIENT')
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateOrderDto) {
     return this.orders.create(user, dto);
   }

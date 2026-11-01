@@ -1,0 +1,368 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  ACCOUNTANT
+  WORKSHOP
+  COURIER
+  PARTNER
+  GUEST
+  CLIENT
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+}
+
+enum PartnerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  BLOCKED
+}
+
+enum OrderStatus {
+  NEW
+  APPROVED
+  PAID
+  IN_PRODUCTION
+  READY
+  SHIPPED
+  DELIVERED
+  REJECTED
+  CANCELLED
+}
+
+enum OtpPurpose {
+  LOGIN
+  REGISTER
+  CHANGE_PHONE
+}
+
+enum OneCDocType {
+  CUSTOMER_ORDER // «Заказ клиента» — при одобрении
+  PRODUCTION // «Заказ на производство» — по сводной накладной
+  SALE // «Реализация товаров и услуг» — при отгрузке
+}
+
+enum OneCDocStatus {
+  PENDING
+  SENT
+  ERROR
+}
+
+/// Любой, кто входит в приложение или веб-панель: сотрудник, партнёр, гость.
+model User {
+  id             String     @id @default(cuid())
+  phone          String?    @unique
+  login          String?    @unique
+  passwordHash   String?
+  name           String
+  email          String?
+  role           Role
+  status         UserStatus @default(ACTIVE)
+  /// Срок действия доступа (гости и временные учётки)
+  accessExpiresAt DateTime?
+  /// Для гостей: разрешено ли оформлять заказы
+  canOrder       Boolean    @default(false)
+  /// Увеличивается при блокировке/смене роли — старые токены перестают работать
+  tokenVersion   Int        @default(0)
+  partnerId      String?
+  partner        Partner?   @relation(fields: [partnerId], references: [id])
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  lastLoginAt    DateTime?
+
+  orders        Order[]         @relation("OrderCreatedBy")
+  courierOrders Order[]         @relation("OrderCourier")
+  pushTokens    PushToken[]
+  notifications Notification[]
+  audit         AuditLog[]
+  statusChanges OrderStatusHistory[]
+}
+
+/// Лавка-партнёр (контрагент). Создаётся заявкой из приложения, одобряется админом.
+model Partner {
+  id          String        @id @default(cuid())
+  name        String
+  inn         String?
+  contactName String
+  phone       String
+  email       String?
+  status      PartnerStatus @default(PENDING)
+  rejectReason String?
+  /// Индивидуальный тип цен; если пусто — тип цен по умолчанию
+  priceTypeId String?
+  priceType   PriceType?    @relation(fields: [priceTypeId], references: [id])
+  /// Код контрагента в 1С
+  oneCId      String?       @unique
+  note        String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  approvedAt  DateTime?
+
+  users     User[]
+  addresses Address[]
+  orders    Order[]
+}
+
+model Address {
+  id        String   @id @default(cuid())
+  partnerId String
+  partner   Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  label     String?
+  address   String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Category {
+  id           String    @id @default(cuid())
+  name         String
+  /// Производственный участок для сводной накладной (выпечка, кондитерский цех, холодный цех)
+  workshopArea String?
+  sortOrder    Int       @default(0)
+  visible      Boolean   @default(true)
+  imageUrl     String?
+  oneCId       String?   @unique
+  products     Product[]
+}
+
+model Product {
+  id           String   @id @default(cuid())
+  categoryId   String
+  category     Category @relation(fields: [categoryId], references: [id])
+  name         String
+  description  String?
+  composition  String?
+  weight       String?
+  shelfLife    String?
+  unit         String   @default("шт")
+  /// Кратность заказа (например, по 6 шт)
+  multiplicity Decimal  @default(1) @db.Decimal(12, 3)
+  photoUrl     String?
+  visible      Boolean  @default(true)
+  isNew        Boolean  @default(false)
+  sortOrder    Int      @default(0)
+  oneCId       String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  prices     Price[]
+  orderItems OrderItem[]
+}
+
+model PriceType {
+  id        String    @id @default(cuid())
+  name      String
+  isDefault Boolean   @default(false)
+  oneCId    String?   @unique
+  prices    Price[]
+  partners  Partner[]
+}
+
+model Price {
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  priceTypeId String
+  priceType   PriceType @relation(fields: [priceTypeId], references: [id], onDelete: Cascade)
+  price       Decimal   @db.Decimal(12, 2)
+
+  @@id([productId, priceTypeId])
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  number          Int         @unique @default(autoincrement())
+  partnerId       String
+  partner         Partner     @relation(fields: [partnerId], references: [id])
+  createdById     String
+  createdBy       User        @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  status          OrderStatus @default(NEW)
+  deliveryDate    DateTime    @db.Date
+  deliveryAddress String
+  comment         String?
+  total           Decimal     @db.Decimal(12, 2)
+  rejectReason    String?
+
+  /// Оплата. Способ оплаты пока не выбран — сейчас бухгалтер отмечает оплату вручную.
+  paymentMethod   String?
+  paidAt          DateTime?
+  paidById        String?
+
+  /// Доставка. Как будет устроен курьер — уточняется; поле оставлено под него.
+  courierId       String?
+  courier         User?       @relation("OrderCourier", fields: [courierId], references: [id])
+  shippedAt       DateTime?
+  deliveredAt     DateTime?
+
+  productionSheetId String?
+  productionSheet   ProductionSheet? @relation(fields: [productionSheetId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items     OrderItem[]
+  history   OrderStatusHistory[]
+  oneCDocs  OneCDocument[]
+
+  @@index([deliveryDate, status])
+  @@index([partnerId])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  name      String
+  unit      String
+  qty       Decimal @db.Decimal(12, 3)
+  price     Decimal @db.Decimal(12, 2)
+  sum       Decimal @db.Decimal(12, 2)
+}
+
+model OrderStatusHistory {
+  id        String       @id @default(cuid())
+  orderId   String
+  order     Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  from      OrderStatus?
+  to        OrderStatus
+  userId    String?
+  user      User?        @relation(fields: [userId], references: [id])
+  comment   String?
+  createdAt DateTime     @default(now())
+}
+
+/// Сводная (консолидированная) накладная для цеха на дату производства.
+model ProductionSheet {
+  id           String   @id @default(cuid())
+  number       Int      @unique @default(autoincrement())
+  date         DateTime @db.Date
+  /// Дозаказ: заказы, одобренные/оплаченные после формирования основной накладной
+  isSupplement Boolean  @default(false)
+  createdById  String?
+  createdAt    DateTime @default(now())
+  orders       Order[]
+  oneCDocs     OneCDocument[]
+
+  @@index([date])
+}
+
+/// Глобальные настройки (одна строка).
+model Settings {
+  id            Int      @id @default(1)
+  /// Время отсечки приёма заказов на следующий день, "HH:MM"
+  cutoffTime    String   @default("16:00")
+  minOrderSum   Decimal  @default(0) @db.Decimal(12, 2)
+  companyName   String   @default("BULO")
+  phone         String?
+  email         String?
+  address       String?
+  workHours     String?
+  instagram     String?
+  whatsapp      String?
+  telegram      String?
+  updatedAt     DateTime @updatedAt
+}
+
+model OtpCode {
+  id        String     @id @default(cuid())
+  phone     String
+  purpose   OtpPurpose
+  codeHash  String
+  attempts  Int        @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime   @default(now())
+
+  @@index([phone, purpose])
+}
+
+model PushToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  platform  String?
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  orderId   String?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, readAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  data      Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+}
+
+/// Очередь документов для 1С («исходящие»). 1С забирает их по API или они уходят Excel-выгрузкой.
+model OneCDocument {
+  id                String        @id @default(cuid())
+  type              OneCDocType
+  status            OneCDocStatus @default(PENDING)
+  orderId           String?
+  order             Order?        @relation(fields: [orderId], references: [id])
+  productionSheetId String?
+  productionSheet   ProductionSheet? @relation(fields: [productionSheetId], references: [id])
+  payload           Json
+  attempts          Int           @default(0)
+  lastError         String?
+  /// Номер документа, который вернула 1С
+  oneCNumber        String?
+  createdAt         DateTime      @default(now())
+  sentAt            DateTime?
+
+  @@index([status, type])
+}
+
+/// Контрагенты, загруженные из 1С, — админ сопоставляет с ними партнёров.
+model OneCCounterparty {
+  oneCId    String   @id
+  name      String
+  inn       String?
+  address   String?
+  phone     String?
+  updatedAt DateTime @updatedAt
+
+  @@index([inn])
+}
+
+/// Журнал обмена с 1С: что пришло, что ушло, ошибки.
+model OneCSyncLog {
+  id        String   @id @default(cuid())
+  direction String // IN | OUT
+  entity    String
+  ok        Boolean
+  count     Int      @default(0)
+  message   String?
+  createdAt DateTime @default(now())
+}

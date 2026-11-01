@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bulo
+      POSTGRES_PASSWORD: bulo
+      POSTGRES_DB: bulo
+    ports:
+      - "5433:5432"
+    volumes:
+      - bulo-db:/var/lib/postgresql/data
+
+volumes:
+  bulo-db:

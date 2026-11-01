@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.next/
+.expo/
+*.tsbuildinfo
+.env
+.env.local
+apps/api/uploads/*
+!apps/api/uploads/.gitkeep
+coverage/
+npm-debug.log*
+.DS_Store
+ios/
+android/

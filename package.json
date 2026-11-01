@@ -1,0 +1,22 @@
+{
+  "name": "bulo-app",
+  "private": true,
+  "version": "0.1.0",
+  "description": "BULO — приложение для заказов выпечки: мобильное приложение, веб-панель и API",
+  "workspaces": [
+    "apps/api",
+    "packages/*"
+  ],
+  "scripts": {
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "api:dev": "npm run dev -w @bulo/api",
+    "admin:dev": "npm run dev -w @bulo/admin",
+    "mobile:dev": "cd apps/mobile && npx expo start",
+    "build": "npm run build -w @bulo/shared && npm run build -w @bulo/api && npm run build -w @bulo/admin",
+    "test": "npm test -w @bulo/api"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  // Запуск BULO в терминалах VS Code. «BULO: всё» стартует автоматически при открытии папки
+  // (VS Code один раз спросит разрешение на автоматические задачи), либо вручную:
+  // Ctrl+Shift+P → Tasks: Run Task → BULO: всё
+  "version": "2.0.0",
+  "options": {
+    "env": {
+      "PATH": "${env:HOME}/.local/node/bin:${env:PATH}"
+    }
+  },
+  "tasks": [
+    {
+      "label": "BULO: база",
+      "type": "shell",
+      "command": "docker compose up -d db",
+      "presentation": { "group": "bulo", "reveal": "silent" },
+      "problemMatcher": []
+    },
+    {
+      "label": "BULO: API",
+      "type": "shell",
+      "command": "set -a && . ./.env && set +a && npx nest start --watch",
+      "options": { "cwd": "${workspaceFolder}/apps/api" },
+      "dependsOn": ["BULO: база"],
+      "isBackground": true,
+      "presentation": { "group": "bulo", "reveal": "always" },
+      "problemMatcher": {
+        "owner": "bulo-api",
+        "pattern": { "regexp": "^__never__$" },
+        "background": {
+          "activesBegin": "Starting compilation|File change detected",
+          "beginsPattern": "Starting compilation|File change detected",
+          "endsPattern": "BULO API:|Found \\d+ error"
+        }
+      }
+    },
+    {
+      "label": "BULO: веб-панель",
+      "type": "shell",
+      "command": "npm run dev -w @bulo/admin",
+      "isBackground": true,
+      "presentation": { "group": "bulo", "reveal": "always" },
+      "problemMatcher": {
+        "owner": "bulo-admin",
+        "pattern": { "regexp": "^__never__$" },
+        "background": { "beginsPattern": "next dev", "endsPattern": "Ready in" }
+      }
+    },
+    {
+      "label": "BULO: приложение",
+      "type": "shell",
+      "command": "npx expo start --port 8081",
+      "options": { "cwd": "${workspaceFolder}/apps/mobile" },
+      "isBackground": true,
+      "presentation": { "group": "bulo", "reveal": "always" },
+      "problemMatcher": {
+        "owner": "bulo-mobile",
+        "pattern": { "regexp": "^__never__$" },
+        "background": { "beginsPattern": "Starting project", "endsPattern": "Waiting on|Logs for your project" }
+      }
+    },
+    {
+      "label": "BULO: всё",
+      "dependsOn": ["BULO: API", "BULO: веб-панель", "BULO: приложение"],
+      "dependsOrder": "parallel",
+      "runOptions": { "runOn": "folderOpen" },
+      "problemMatcher": []
+    }
+  ]
+}

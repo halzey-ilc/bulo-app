@@ -32,6 +32,7 @@ export function publicUser(user: AuthUser) {
   const { passwordHash, tokenVersion, ...rest } = user;
   return {
     ...rest,
+    hasPassword: !!passwordHash,
     permissions: { canSeePrices: canSeePrices(user), canOrder: canOrder(user) },
   };
 }

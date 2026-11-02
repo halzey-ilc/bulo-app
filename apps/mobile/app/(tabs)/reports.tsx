@@ -1,11 +1,6 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { ReportsView } from '../../src/components/admin/Reports';
 
-// Временная заглушка — экран заполняется в следующем шаге.
-export default function Screen() {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Text>Отчёты</Text>
-    </View>
-  );
+export default function ReportsTab() {
+  return <ReportsView />;
 }

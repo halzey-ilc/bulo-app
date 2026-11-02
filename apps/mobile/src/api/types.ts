@@ -23,6 +23,8 @@ export interface User {
   partnerId: string | null;
   partner: Partner | null;
   permissions: { canSeePrices: boolean; canOrder: boolean };
+  /** Задан ли пароль: если нет, при смене текущий пароль не спрашиваем */
+  hasPassword?: boolean;
 }
 
 export interface AuthResponse {

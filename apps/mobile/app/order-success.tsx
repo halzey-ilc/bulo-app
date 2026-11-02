@@ -4,8 +4,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { Icon } from '../src/components/Icon';
+import { FadeIn } from '../src/components/motion';
 import { Button, T } from '../src/components/ui';
-import { dateLong, dayLabel } from '../src/lib/format';
+import { deliveryPhrase } from '../src/lib/format';
 import { colors, space } from '../src/theme';
 
 export default function OrderSuccess() {
@@ -35,13 +36,15 @@ export default function OrderSuccess() {
         <Animated.View style={[styles.badge, { transform: [{ scale: pop }] }]}>
           <Icon name="check" size={64} color={colors.white} strokeWidth={2.4} />
         </Animated.View>
-        <T v="display" center>
-          Заказ №{number} принят!
-        </T>
-        <T v="body" center color={colors.textMuted} style={{ maxWidth: 300, fontSize: 16, lineHeight: 24 }}>
-          {date ? `Доставка — ${dayLabel(date).toLowerCase()}, ${dateLong(date)}. ` : ''}
-          Менеджер проверит заказ и подтвердит его. Статус будет обновляться в разделе «Заказы».
-        </T>
+        <FadeIn delay={250} style={{ gap: space.md, alignItems: 'center' }}>
+          <T v="display" center>
+            Заказ №{number} принят!
+          </T>
+          <T v="body" center color={colors.textMuted} style={{ maxWidth: 300, fontSize: 16, lineHeight: 24 }}>
+            {date ? `Доставка — ${deliveryPhrase(date)}. ` : ''}
+            Менеджер проверит заказ и подтвердит его — статус обновится сам, а мы пришлём уведомление.
+          </T>
+        </FadeIn>
       </View>
       <View style={{ gap: space.sm }}>
         <Button title="Следить за заказом" onPress={() => router.replace(`/order/${id}`)} />

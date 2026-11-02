@@ -4,6 +4,8 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Order, Orders } from '../../src/api';
 import { Icon } from '../../src/components/Icon';
+import { OfficeOrders } from '../../src/components/admin/OfficeOrders';
+import { BuyerOrders } from '../../src/components/BuyerOrders';
 import { TAB_BAR_SPACE } from '../../src/components/layout';
 import { OrderCard, OrderCardSkeleton } from '../../src/components/order';
 import { Button, Chip, EmptyState, ErrorState, T } from '../../src/components/ui';
@@ -49,7 +51,13 @@ function defaultFilter(role: Role | undefined, persona: string) {
   return 'new';
 }
 
-export default function OrdersScreen() {
+// Офис (админ/менеджер) — отдельный экран разбора заказов.
+export default function OrdersTab() {
+  const persona = usePersona();
+  return isOffice(persona) ? <OfficeOrders /> : persona === 'buyer' ? <BuyerOrders /> : <OrdersScreen />;
+}
+
+function OrdersScreen() {
   const insets = useSafeAreaInsets();
   const persona = usePersona();
   const role = useAuth((s) => s.user?.role);

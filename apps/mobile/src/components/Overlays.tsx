@@ -1,5 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import {
+  Animated,
+  Easing,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { errorMessage } from '../api';
 import { useUi } from '../store/ui';
@@ -14,14 +24,26 @@ export function ToastHost() {
   const insets = useSafeAreaInsets();
   const y = useRef(new Animated.Value(-120)).current;
   const [shown, setShown] = useState(t);
+  // Сообщения с действием («Вернуть») — снизу, над панелью вкладок, как снекбар.
+  const atBottom = !!shown?.action;
+  const away = atBottom ? 420 : -140;
 
   useEffect(() => {
-    if (!t) return;
+    if (!t) {
+      // Убрали сообщение — снимаем его с экрана целиком, чтобы не перекрывало касания.
+      setShown(null);
+      return;
+    }
     setShown(t);
-    Animated.spring(y, { toValue: 0, useNativeDriver: true, speed: 16, bounciness: 8 }).start();
-    const timer = setTimeout(() => {
-      Animated.timing(y, { toValue: -140, duration: 220, useNativeDriver: true }).start(() => hide());
-    }, t.kind === 'error' ? 3800 : 2200);
+    const hideTo = t.action ? 420 : -140;
+    y.setValue(hideTo);
+    Animated.spring(y, { toValue: 0, useNativeDriver: true, speed: 16, bounciness: 6 }).start();
+    const timer = setTimeout(
+      () => {
+        Animated.timing(y, { toValue: hideTo, duration: 220, useNativeDriver: true }).start(() => hide());
+      },
+      t.action ? 6000 : t.kind === 'error' ? 3800 : 2200,
+    );
     return () => clearTimeout(timer);
   }, [t, y, hide]);
 
@@ -31,19 +53,91 @@ export function ToastHost() {
     error: { bg: colors.coffee, icon: 'info' as const, fg: colors.white },
     info: { bg: colors.cambodia, icon: 'info' as const, fg: colors.oatMilk },
   }[shown.kind];
+  const close = () => {
+    Animated.timing(y, { toValue: away, duration: 180, useNativeDriver: true }).start(() => hide());
+  };
   return (
     <Animated.View
       pointerEvents="box-none"
-      style={[styles.toastWrap, { top: insets.top + 8, transform: [{ translateY: y }] }]}
+      style={[
+        styles.toastWrap,
+        atBottom ? { bottom: insets.bottom + 196 } : { top: insets.top + 8 },
+        { transform: [{ translateY: y }] },
+      ]}
     >
-      <Pressable onPress={hide} style={[styles.toast, { backgroundColor: palette.bg }]}>
-        <View style={styles.toastIcon}>
-          <Icon name={palette.icon} size={18} color={palette.bg} strokeWidth={2.2} />
-        </View>
-        <T v="bodyStrong" color={palette.fg} style={{ flex: 1 }}>
-          {shown.text}
-        </T>
-      </Pressable>
+      <View style={[styles.toast, { backgroundColor: palette.bg }]} accessibilityLiveRegion="polite">
+        <Pressable onPress={close} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.md }}>
+          <View style={styles.toastIcon}>
+            <Icon name={palette.icon} size={18} color={palette.bg} strokeWidth={2.2} />
+          </View>
+          <T v="bodyStrong" color={palette.fg} style={{ flex: 1 }} numberOfLines={2}>
+            {shown.text}
+          </T>
+        </Pressable>
+        {shown.action && (
+          <Pressable
+            hitSlop={8}
+            onPress={() => {
+              const act = shown.action;
+              close();
+              act?.onPress();
+            }}
+            style={styles.toastAction}
+            accessibilityRole="button"
+          >
+            <T v="small" color={colors.cambodia} style={{ fontFamily: fonts.extrabold }}>
+              {shown.action.label}
+            </T>
+          </Pressable>
+        )}
+      </View>
+    </Animated.View>
+  );
+}
+
+/**
+ * «Полёт» в корзину: оранжевая капля летит от кнопки «+» к центральной кнопке корзины,
+ * после чего корзина «подпрыгивает».
+ */
+export function FlyToCartHost() {
+  const fly = useUi((s) => s.fly);
+  const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const p = useRef(new Animated.Value(0)).current;
+  const [cur, setCur] = useState(fly);
+
+  useEffect(() => {
+    if (!fly) return;
+    setCur(fly);
+    p.setValue(0);
+    Animated.timing(p, { toValue: 1, duration: 520, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(() => {
+      setCur(null);
+      useUi.getState().bumpCart();
+    });
+  }, [fly, p]);
+
+  if (!cur) return null;
+  const tx = width / 2 - cur.x;
+  const ty = height - Math.max(insets.bottom, 10) - 44 - cur.y;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.flyDot,
+        {
+          left: cur.x - 14,
+          top: cur.y - 14,
+          opacity: p.interpolate({ inputRange: [0, 0.85, 1], outputRange: [1, 1, 0] }),
+          transform: [
+            { translateX: p.interpolate({ inputRange: [0, 1], outputRange: [0, tx] }) },
+            // Дуга: сначала чуть вверх, потом вниз к корзине.
+            { translateY: p.interpolate({ inputRange: [0, 0.35, 1], outputRange: [0, -40, ty] }) },
+            { scale: p.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0.6, 1.1, 0.45] }) },
+          ],
+        },
+      ]}
+    >
+      <Icon name="plus" size={16} color={colors.white} strokeWidth={2.6} />
     </Animated.View>
   );
 }
@@ -134,6 +228,24 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 480,
     ...shadows.float,
+  },
+  toastAction: {
+    backgroundColor: colors.lime,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+  },
+  flyDot: {
+    position: 'absolute',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.mango,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2000,
+    borderWidth: 2,
+    borderColor: colors.white,
   },
   toastIcon: {
     width: 28,

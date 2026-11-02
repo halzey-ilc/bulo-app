@@ -23,7 +23,7 @@ export function AuthScaffold({
 }) {
   const insets = useSafeAreaInsets();
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior="padding">
       <Svg style={StyleSheet.absoluteFill} viewBox="0 0 400 800" preserveAspectRatio="xMidYMin slice" pointerEvents="none">
         <Circle cx={380} cy={60} r={110} fill={colors.softYellow} opacity={0.8} />
         <Circle cx={330} cy={170} r={14} fill={colors.strawberryMilk} opacity={0.8} />

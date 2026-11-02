@@ -98,3 +98,9 @@ export function plural(n: number, one: string, few: string, many: string): strin
   if (b === 1) return one;
   return many;
 }
+
+/** «завтра, 3 ноября, вторник» или «5 ноября, четверг» — без повтора даты. */
+export function deliveryPhrase(iso: string): string {
+  const label = dayLabel(iso);
+  return /^[0-9]/.test(label) ? dateLong(iso) : `${label.toLowerCase()}, ${dateLong(iso)}`;
+}

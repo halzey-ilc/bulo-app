@@ -16,7 +16,8 @@ export default function Workshop() {
   const today = todayIso();
   const days = [today, addDaysIso(today, 1), addDaysIso(today, 2)];
   const [date, setDate] = useState(days[1]);
-  const summary = useLoad(() => Production.summary(date), [date]);
+  // Кэш по дню: переключение «Сегодня / Завтра / Послезавтра» — мгновенное.
+  const summary = useLoad(() => Production.summary(date), [date], { key: `prod:${date}`, staleTime: 20_000 });
   const inProd = useLoad(() => Orders.list(['IN_PRODUCTION']), []);
   const s = summary.data;
 

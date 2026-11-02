@@ -43,6 +43,16 @@ export function tap() {
   Haptics.selectionAsync().catch(() => {});
 }
 
+/** Успех: заказ оформлен, товар в корзине. */
+export function hapticSuccess() {
+  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+}
+
+/** Лёгкий «толчок»: добавление, свайп. */
+export function hapticImpact(strong?: boolean) {
+  Haptics.impactAsync(strong ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+}
+
 /* ───────── Pressable with scale ───────── */
 
 export function Touchable({
@@ -186,6 +196,7 @@ export function Chip({
     <Touchable
       onPress={onPress}
       haptic
+      hitSlop={4}
       style={[styles.chip, active ? styles.chipActive : null]}
       accessibilityState={{ selected: !!active }}
     >
@@ -252,9 +263,19 @@ export function Field({
   hint,
   error,
   left,
+  right,
+  inputRef,
   style,
   ...rest
-}: TextInputProps & { label?: string; hint?: string; error?: string | null; left?: React.ReactNode }) {
+}: TextInputProps & {
+  label?: string;
+  hint?: string;
+  error?: string | null;
+  left?: React.ReactNode;
+  /** Правый слот: «показать пароль», «очистить». */
+  right?: React.ReactNode;
+  inputRef?: React.Ref<React.ComponentRef<typeof TextInput>>;
+}) {
   const [focused, setFocused] = React.useState(false);
   return (
     <View style={{ gap: 6 }}>
@@ -273,6 +294,7 @@ export function Field({
       >
         {left}
         <TextInput
+          ref={inputRef}
           placeholderTextColor={colors.textSoft}
           {...rest}
           onFocus={(e) => {
@@ -285,6 +307,7 @@ export function Field({
           }}
           style={[styles.inputText, rest.multiline && { textAlignVertical: 'top' }, style as StyleProp<TextStyle>]}
         />
+        {right}
       </View>
       {error ? (
         <T v="small" color={colors.danger}>

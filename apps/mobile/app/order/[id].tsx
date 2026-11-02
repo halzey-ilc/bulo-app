@@ -1,25 +1,32 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { Order, Orders } from '../../src/api';
+import { Order } from '../../src/api';
+import { FadeIn, Pulse } from '../../src/components/motion';
+import { hapticSuccess } from '../../src/components/ui';
+import { invalidate } from '../../src/lib/cache';
+import { invalidateOrders, Q, useQuery } from '../../src/lib/queries';
+import { toast } from '../../src/store/ui';
+import { OfficeOrderTools } from '../../src/components/admin/OfficeExtras';
 import { callPhone, openMaps } from '../../src/components/contacts';
 import { Icon } from '../../src/components/Icon';
 import { BottomBar, Header, Screen } from '../../src/components/layout';
 import { STATUS_STYLE, StatusChip } from '../../src/components/order';
 import { ProductImage } from '../../src/components/product';
 import { Button, Card, Divider, ErrorState, Row, Skeleton, T } from '../../src/components/ui';
-import { dateLong, dateTime, dayLabel, formatPhone, money, qtyText } from '../../src/lib/format';
+import { dateLong, dateTime, dayLabel, deliveryPhrase, formatPhone, money, qtyText } from '../../src/lib/format';
 import { actionKind, runOrderAction } from '../../src/lib/orderActions';
 import { repeatOrder } from '../../src/lib/repeat';
-import { useLoad } from '../../src/lib/useLoad';
-import { usePersona } from '../../src/store/auth';
+import { isOffice, usePersona } from '../../src/store/auth';
 import { ACTION_LABELS, ORDER_FLOW, ORDER_STATUS_LABELS, OrderStatus } from '../../src/shared';
 import { colors, fonts, radius, space } from '../../src/theme';
 
 export default function OrderDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const persona = usePersona();
-  const { data: order, error, loading, refresh, refreshing } = useLoad(() => Orders.get(id), [id]);
+  // Живой статус: открыт мгновенно из кэша, пока экран открыт — опрос каждые 25 секунд.
+  const { data: order, error, loading, refresh, refreshing } = useQuery(Q.order(id), { staleTime: 10_000, poll: 25_000 });
+  useStatusChangeNotice(order);
 
   if (loading || !order) {
     return (
@@ -39,7 +46,10 @@ export default function OrderDetail() {
 
   const buyer = persona === 'buyer';
   const actions = (order.actions ?? []).filter((a) => !(buyer && a !== 'CANCELLED'));
-  const onDone = () => refresh();
+  const onDone = () => {
+    invalidateOrders();
+    refresh();
+  };
   const st = STATUS_STYLE[order.status];
 
   return (
@@ -55,7 +65,7 @@ export default function OrderDetail() {
             {ORDER_STATUS_LABELS[order.status]}
           </T>
           <T v="body" color={st.fg} style={{ opacity: 0.85 }}>
-            Доставка {dayLabel(order.deliveryDate).toLowerCase()}, {dateLong(order.deliveryDate)}
+            Доставка {deliveryPhrase(order.deliveryDate)}
           </T>
         </View>
 
@@ -133,6 +143,8 @@ export default function OrderDetail() {
             </>
           )}
         </Card>
+
+        {isOffice(persona) && <OfficeOrderTools order={order} />}
 
         {/* Таймлайн */}
         <Card style={{ gap: space.md }}>
@@ -220,8 +232,13 @@ function Timeline({ order }: { order: Order }) {
         const color =
           s.state === 'fail' ? colors.danger : s.state === 'todo' ? 'rgba(38,66,43,0.18)' : colors.mango;
         return (
-          <View key={s.status} style={{ flexDirection: 'row', gap: space.md }}>
+          <FadeIn key={s.status} delay={i * 70} offset={8} style={{ flexDirection: 'row', gap: space.md }}>
             <View style={{ alignItems: 'center', width: 26 }}>
+              {s.state === 'current' && (
+                <View style={{ position: 'absolute', top: 0, width: 26, height: 26, alignItems: 'center', justifyContent: 'center' }}>
+                  <Pulse size={26} />
+                </View>
+              )}
               <View
                 style={[
                   styles.dot,
@@ -257,11 +274,27 @@ function Timeline({ order }: { order: Order }) {
                 </T>
               )}
             </View>
-          </View>
+          </FadeIn>
         );
       })}
     </View>
   );
+}
+
+/** Статус сменился, пока заказ открыт, — мягко сообщаем и обновляем списки. */
+function useStatusChangeNotice(order: Order | undefined) {
+  const prev = useRef<{ id: string; status: string } | null>(null);
+  useEffect(() => {
+    if (!order) return;
+    const p = prev.current;
+    if (p && p.id === order.id && p.status !== order.status) {
+      hapticSuccess();
+      toast.success(`Заказ №${order.number}: ${ORDER_STATUS_LABELS[order.status].toLowerCase()}`);
+      invalidate('orders:');
+      invalidate('notif:');
+    }
+    prev.current = { id: order.id, status: order.status };
+  }, [order]);
 }
 
 const styles = StyleSheet.create({

@@ -1,11 +1,9 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { AccountantDashboard, OfficeDashboard } from '../../src/components/admin/Dashboard';
+import { usePersona } from '../../src/store/auth';
 
-// Временная заглушка — экран заполняется в следующем шаге.
-export default function Screen() {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Text>Пульт</Text>
-    </View>
-  );
+/** Пульт: у бухгалтера — про деньги, у администратора и менеджера — про заказы и людей. */
+export default function DashboardTab() {
+  const persona = usePersona();
+  return persona === 'accountant' ? <AccountantDashboard /> : <OfficeDashboard />;
 }

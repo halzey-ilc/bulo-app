@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshControl, ScrollView, ScrollViewProps, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { Platform, RefreshControl, ScrollView, ScrollViewProps, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, space } from '../theme';
@@ -73,7 +73,7 @@ export function Screen({
   topInset?: boolean;
 }) {
   const insets = useSafeAreaInsets();
-  return (
+  const scroll = (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.bg }}
       contentContainerStyle={[
@@ -88,14 +88,48 @@ export function Screen({
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
       refreshControl={
-        onRefresh ? (
-          <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={colors.mango} colors={[colors.mango]} />
-        ) : undefined
+        onRefresh ? <BrandRefresh refreshing={!!refreshing} onRefresh={onRefresh} offset={topInset ? insets.top : undefined} /> : undefined
       }
       {...rest}
     >
       {children}
     </ScrollView>
+  );
+  if (!topInset) return scroll;
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      {scroll}
+      <StatusScrim />
+    </View>
+  );
+}
+
+/** Подложка под статус-бар: при прокрутке контент не «просвечивает» под часами. */
+export function StatusScrim() {
+  const insets = useSafeAreaInsets();
+  return (
+    <View
+      pointerEvents="none"
+      style={{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top, backgroundColor: 'rgba(249,245,230,0.97)', zIndex: 10, elevation: 10 }}
+    />
+  );
+}
+
+/** Фирменный индикатор обновления: манго-кольцо на молочной подложке. */
+// В вебе ScrollView передаёт сюда свои children/style через cloneElement — их нужно пробросить, иначе экран пустой.
+export function BrandRefresh({ refreshing, onRefresh, offset, ...rest }: { refreshing: boolean; onRefresh: () => void; offset?: number; children?: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+  return (
+    <RefreshControl
+      {...rest}
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      tintColor={colors.mango}
+      colors={[colors.mango, colors.coffee]}
+      progressBackgroundColor={colors.softYellow}
+      progressViewOffset={offset}
+      title={Platform.OS === 'ios' ? 'Достаём из печи…' : undefined}
+      titleColor={colors.textMuted}
+    />
   );
 }
 

@@ -235,6 +235,25 @@ const P: Record<string, React.ReactNode> = {
     </>
   ),
   navigation: <Path d="M4 11 20 4l-7 16-2-7z" />,
+  eye: (
+    <>
+      <Path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+      <Circle cx={12} cy={12} r={3} />
+    </>
+  ),
+  eyeOff: (
+    <>
+      <Path d="M10 5.8c.6-.2 1.3-.3 2-.3 6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-2.6 3.4M6.4 7.2C3.9 8.9 2.5 12 2.5 12S6 18.5 12 18.5c1.7 0 3.2-.5 4.4-1.2" />
+      <Path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M4 4l16 16" />
+    </>
+  ),
+  lock: (
+    <>
+      <Rect x={5} y={10.5} width={14} height={10} rx={2.5} />
+      <Path d="M8 10.5V8a4 4 0 0 1 8 0v2.5M12 14.5v2" />
+    </>
+  ),
+  flame: <Path d="M12 20.5c-3.6 0-6-2.5-6-5.8 0-3.6 3-5.2 3.6-9.2 2.6 1.6 3.9 3.8 3.9 6 1-.5 1.7-1.6 1.9-2.8 1.6 1.3 2.6 3.4 2.6 5.9 0 3.4-2.4 5.9-6 5.9z" />,
   copy: (
     <>
       <Rect x={8} y={8} width={12} height={12} rx={2.5} />
@@ -250,18 +269,21 @@ export function Icon({
   size = 24,
   color = colors.text,
   strokeWidth = 1.6,
+  fill = 'none',
 }: {
   name: IconName | string;
   size?: number;
   color?: string;
   strokeWidth?: number;
+  /** Заливка (например, «закрашенное» сердечко избранного). */
+  fill?: string;
 }) {
   return (
     <Svg
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      fill="none"
+      fill={fill}
       stroke={color}
       strokeWidth={strokeWidth}
       strokeLinecap="round"

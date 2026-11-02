@@ -1,18 +1,20 @@
-import React from 'react';
-import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import React, { memo, useCallback, useEffect, useRef } from 'react';
+import { Animated, GestureResponderEvent, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg';
 import type { Product } from '../api';
 import { money } from '../lib/format';
-import { normalizeQty, useCart } from '../store/cart';
-import { toast } from '../store/ui';
+import { goTab } from '../lib/nav';
+import { normalizeQty, useCart, useInCart } from '../store/cart';
+import { useIsFavorite, usePrefs } from '../store/prefs';
+import { toast, useUi } from '../store/ui';
 import { colors, fonts, radius, shadows, space, tileFor } from '../theme';
 import { categoryIcon, Icon } from './Icon';
-import { T, Touchable } from './ui';
+import { hapticImpact, hapticSuccess, T, Touchable } from './ui';
 
 /** Фото товара или фирменная заглушка: мягкая цветная плитка + линейная иконка выпечки. */
-export function ProductImage({
+export const ProductImage = memo(function ProductImage({
   photoUrl,
   category,
   seed,
@@ -32,7 +34,14 @@ export function ProductImage({
   if (photoUrl) {
     return (
       <View style={[{ borderRadius: rounded, overflow: 'hidden', backgroundColor: tile.bg }, style]}>
-        <Image source={{ uri: photoUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />
+        <Image
+          source={{ uri: photoUrl }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          transition={180}
+          cachePolicy="memory-disk"
+          recyclingKey={photoUrl}
+        />
       </View>
     );
   }
@@ -49,7 +58,7 @@ export function ProductImage({
       <Icon name={categoryIcon(category)} size={iconSize} color={tile.fg} strokeWidth={1.4} />
     </View>
   );
-}
+});
 
 export function NewBadge({ style }: { style?: StyleProp<ViewStyle> }) {
   return (
@@ -62,10 +71,13 @@ export function NewBadge({ style }: { style?: StyleProp<ViewStyle> }) {
   );
 }
 
+/**
+ * Добавление в корзину: тактильный отклик, «полёт» к корзине (если известна точка касания)
+ * или короткое сообщение со ссылкой на корзину.
+ */
 export function useAddToCart() {
-  const add = useCart((s) => s.add);
-  return (p: Product, qty?: number) => {
-    add(
+  return useCallback((p: Product, qty?: number, e?: GestureResponderEvent | { toast: true }) => {
+    useCart.getState().add(
       {
         productId: p.id,
         name: p.name,
@@ -77,11 +89,57 @@ export function useAddToCart() {
       },
       qty ?? normalizeQty(p.multiplicity || 1, p.multiplicity),
     );
-    toast.success(`«${p.name}» в корзине`);
-  };
+    hapticSuccess();
+    const ne = e && 'nativeEvent' in e ? e.nativeEvent : undefined;
+    if (ne && ne.pageX != null) {
+      useUi.getState().flyToCart(ne.pageX, ne.pageY);
+    } else {
+      useUi.getState().bumpCart();
+      toast.success(`«${p.name}» в корзине`, { label: 'Открыть', onPress: () => goTab('/cart') });
+    }
+  }, []);
 }
 
-export function ProductCard({
+/** Сердечко «в избранное» с пружинкой. */
+export function FavoriteButton({ productId, size = 34, style }: { productId: string; size?: number; style?: StyleProp<ViewStyle> }) {
+  const fav = useIsFavorite(productId);
+  const scale = useRef(new Animated.Value(1)).current;
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    scale.setValue(0.6);
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 18, bounciness: 16 }).start();
+  }, [fav, scale]);
+  return (
+    <Touchable
+      hitSlop={8}
+      scaleTo={0.85}
+      onPress={() => {
+        const now = usePrefs.getState().toggleFavorite(productId);
+        hapticImpact(now);
+      }}
+      accessibilityRole="button"
+      accessibilityLabel={fav ? 'Убрать из избранного' : 'В избранное'}
+      accessibilityState={{ selected: fav }}
+      style={[styles.fav, { width: size, height: size, borderRadius: size / 2 }, style]}
+    >
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Icon
+          name="heart"
+          size={Math.round(size * 0.53)}
+          color={fav ? colors.mango : colors.textMuted}
+          fill={fav ? colors.mango : 'none'}
+          strokeWidth={2}
+        />
+      </Animated.View>
+    </Touchable>
+  );
+}
+
+export const ProductCard = memo(function ProductCard({
   product,
   canOrder,
   width,
@@ -91,12 +149,14 @@ export function ProductCard({
   width?: number;
 }) {
   const addToCart = useAddToCart();
-  const inCart = useCart((s) => s.lines.find((l) => l.productId === product.id)?.qty ?? 0);
+  const inCart = useInCart(product.id);
+  const step = product.multiplicity || 1;
   return (
     <Touchable
       onPress={() => router.push(`/product/${product.id}`)}
       style={[styles.card, width ? { width } : { flex: 1 }]}
       scaleTo={0.97}
+      accessibilityLabel={product.name}
     >
       <View>
         <ProductImage
@@ -107,17 +167,10 @@ export function ProductCard({
           rounded={radius.lg}
         />
         {product.isNew && <NewBadge style={{ position: 'absolute', top: 8, left: 8 }} />}
-        {inCart > 0 && (
-          <View style={styles.inCart}>
-            <Icon name="check" size={12} color={colors.white} strokeWidth={2.4} />
-            <T v="caption" color={colors.white} style={{ fontFamily: fonts.extrabold }}>
-              {inCart}
-            </T>
-          </View>
-        )}
+        <FavoriteButton productId={product.id} style={{ position: 'absolute', top: 6, right: 6 }} />
       </View>
       <View style={{ paddingHorizontal: 4, paddingTop: 10, gap: 2, flex: 1 }}>
-        <T v="bodyStrong" numberOfLines={2} style={{ fontSize: 14, lineHeight: 19 }}>
+        <T v="bodyStrong" numberOfLines={2} style={{ fontSize: 14, lineHeight: 19, minHeight: 38 }}>
           {product.name}
         </T>
         <T v="small" color={colors.textSoft} numberOfLines={1}>
@@ -126,9 +179,11 @@ export function ProductCard({
       </View>
       <View style={styles.cardFoot}>
         {product.price != null ? (
-          <T v="h3" style={{ fontSize: 16 }}>
-            {money(product.price)}
-          </T>
+          inCart > 0 && canOrder ? null : (
+            <T v="h3" style={{ fontSize: 16 }} numberOfLines={1}>
+              {money(product.price)}
+            </T>
+          )
         ) : (
           <View style={styles.lockPrice}>
             <Icon name="key" size={14} color={colors.mango} />
@@ -138,19 +193,44 @@ export function ProductCard({
           </View>
         )}
         {product.price != null && canOrder && (
-          <Touchable
-            haptic
-            onPress={() => addToCart(product)}
-            style={styles.addBtn}
-            accessibilityLabel="Добавить в корзину"
-          >
-            <Icon name="plus" size={20} color={colors.white} strokeWidth={2.2} />
-          </Touchable>
+          inCart > 0 ? (
+            <View style={styles.miniStepper}>
+              <Touchable
+                haptic
+                hitSlop={6}
+                onPress={() => useCart.getState().setQty(product.id, Math.round((inCart - step) * 1000) / 1000)}
+                style={styles.miniBtn}
+                accessibilityLabel="Меньше"
+              >
+                <Icon name={inCart - step <= 0 ? 'trash' : 'minus'} size={16} color={colors.white} strokeWidth={2.2} />
+              </Touchable>
+              <T v="bodyStrong" color={colors.white} style={{ fontFamily: fonts.extrabold, minWidth: 28, textAlign: 'center' }}>
+                {String(inCart).replace('.', ',')}
+              </T>
+              <Touchable
+                hitSlop={6}
+                onPress={(e) => addToCart(product, step, e)}
+                style={styles.miniBtn}
+                accessibilityLabel="Больше"
+              >
+                <Icon name="plus" size={16} color={colors.white} strokeWidth={2.2} />
+              </Touchable>
+            </View>
+          ) : (
+            <Touchable
+              hitSlop={6}
+              onPress={(e) => addToCart(product, undefined, e)}
+              style={styles.addBtn}
+              accessibilityLabel={`Добавить «${product.name}» в корзину`}
+            >
+              <Icon name="plus" size={20} color={colors.white} strokeWidth={2.2} />
+            </Touchable>
+          )
         )}
       </View>
     </Touchable>
   );
-}
+});
 
 export function ProductCardSkeleton() {
   return (
@@ -181,18 +261,19 @@ export function Stepper({
 }) {
   const s = step > 0 ? step : 1;
   const round = (n: number) => Math.round(n * 1000) / 1000;
-  const h = compact ? 38 : 52;
+  const h = compact ? 40 : 52;
   return (
     <View style={[styles.stepper, { height: h, borderRadius: h / 2 }]}>
       <Touchable
         haptic
+        hitSlop={4}
         onPress={() => onChange(Math.max(min, round(value - s)))}
         style={[styles.stepBtn, { width: h - 8, height: h - 8 }]}
         accessibilityLabel="Меньше"
       >
         <Icon name={min === 0 && value - s <= 0 ? 'trash' : 'minus'} size={compact ? 16 : 20} color={colors.text} />
       </Touchable>
-      <View style={{ minWidth: compact ? 52 : 60, alignItems: 'center' }}>
+      <View style={{ minWidth: compact ? 48 : 60, alignItems: 'center' }}>
         <T v={compact ? 'bodyStrong' : 'h3'} style={{ fontFamily: fonts.extrabold }}>
           {String(round(value)).replace('.', ',')}
         </T>
@@ -204,6 +285,7 @@ export function Stepper({
       </View>
       <Touchable
         haptic
+        hitSlop={4}
         onPress={() => onChange(round(value + s))}
         style={[styles.stepBtn, { width: h - 8, height: h - 8, backgroundColor: colors.mango }]}
         accessibilityLabel="Больше"
@@ -228,13 +310,31 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 4,
     paddingTop: 10,
-    minHeight: 46,
+    minHeight: 50,
   },
   addBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: colors.mango,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniStepper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.cambodia,
+    borderRadius: 20,
+    height: 40,
+    paddingHorizontal: 3,
+  },
+  miniBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -256,17 +356,10 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: radius.pill,
   },
-  inCart: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    flexDirection: 'row',
+  fav: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
     alignItems: 'center',
-    gap: 2,
-    backgroundColor: colors.cambodia,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: radius.pill,
+    justifyContent: 'center',
   },
   stepper: {
     flexDirection: 'row',

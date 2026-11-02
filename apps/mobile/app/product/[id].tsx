@@ -1,18 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Catalog } from '../../src/api';
 import { NoOrderNote, PartnerStatusCard, SignInCta } from '../../src/components/gates';
 import { Icon, IconName } from '../../src/components/Icon';
 import { BottomBar } from '../../src/components/layout';
-import { NewBadge, ProductImage, Stepper, useAddToCart } from '../../src/components/product';
+import { FavoriteButton, NewBadge, ProductCard, ProductImage, Stepper, useAddToCart } from '../../src/components/product';
 import { Button, ErrorState, Skeleton, T, Touchable } from '../../src/components/ui';
+import { buyerCopy } from '../../src/lib/cutoff';
 import { money } from '../../src/lib/format';
 import { goTab } from '../../src/lib/nav';
-import { useLoad } from '../../src/lib/useLoad';
+import { productFromCache, Q, useQuery } from '../../src/lib/queries';
 import { useAuth } from '../../src/store/auth';
-import { useCart, useCartCount } from '../../src/store/cart';
+import { useCartCount, useInCart } from '../../src/store/cart';
 import { colors, fonts, radius, shadows, space } from '../../src/theme';
 
 export default function ProductScreen() {
@@ -20,15 +20,26 @@ export default function ProductScreen() {
   const insets = useSafeAreaInsets();
   const user = useAuth((s) => s.user);
   const canOrder = !!user?.permissions.canOrder;
-  const { data: p, error, loading, refresh } = useLoad(() => Catalog.product(id), [id, user?.id], { refetchOnFocus: false });
-  const inCart = useCart((s) => s.lines.find((l) => l.productId === id)?.qty ?? 0);
+  // Карточка открывается мгновенно: данные берём из уже загруженного каталога, потом тихо уточняем.
+  const { data: p, error, loading, refresh } = useQuery(Q.product(id, user?.id ?? 'anon'), {
+    refetchOnFocus: false,
+    staleTime: 60_000,
+    initial: () => productFromCache(id),
+  });
+  const all = useQuery(Q.products(user?.id ?? 'anon'), { refetchOnFocus: false, staleTime: 5 * 60_000 });
+  const inCart = useInCart(id);
   const cartCount = useCartCount();
   const addToCart = useAddToCart();
   const [qty, setQty] = useState(0);
+  const related = useMemo(
+    () => (all.data ?? []).filter((x) => x.id !== id && x.categoryId === p?.categoryId).slice(0, 8),
+    [all.data, id, p?.categoryId],
+  );
 
   useEffect(() => {
     if (p) setQty(p.multiplicity || 1);
-  }, [p]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p?.id]);
 
   const back = (
     <Touchable
@@ -89,17 +100,27 @@ export default function ProductScreen() {
             </View>
             {p.isNew && <NewBadge />}
           </View>
-          <T v="display" style={{ fontSize: 28, lineHeight: 34 }}>
-            {p.name}
-          </T>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.md }}>
+            <T v="display" style={{ fontSize: 28, lineHeight: 34, flex: 1 }}>
+              {p.name}
+            </T>
+            <FavoriteButton productId={p.id} size={44} style={{ backgroundColor: colors.white, marginTop: -2 }} />
+          </View>
           {p.price != null && (
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
               <T v="h1" color={colors.mango}>
                 {money(p.price)}
               </T>
               <T v="body" color={colors.textSoft}>
                 за 1 {p.unit}
               </T>
+              {user && (
+                <View style={styles.priceTag}>
+                  <T v="caption" color={colors.cambodia} style={{ fontFamily: fonts.bold }}>
+                    {buyerCopy(user).priceNote}
+                  </T>
+                </View>
+              )}
             </View>
           )}
           {!!p.description && (
@@ -137,6 +158,22 @@ export default function ProductScreen() {
           {!user && <SignInCta />}
           {user && <PartnerStatusCard user={user} />}
           {user?.role === 'GUEST' && !canOrder && <NoOrderNote />}
+
+          {related.length > 0 && (
+            <View style={{ gap: space.md, marginTop: space.sm }}>
+              <T v="h3">Ещё из «{p.category?.name}»</T>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginHorizontal: -space.xl }}
+                contentContainerStyle={{ paddingHorizontal: space.xl, gap: space.md, paddingVertical: 4 }}
+              >
+                {related.map((r) => (
+                  <ProductCard key={r.id} product={r} canOrder={canOrder} width={156} />
+                ))}
+              </ScrollView>
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -166,7 +203,8 @@ export default function ProductScreen() {
             <Button
               title="В корзину"
               style={{ flex: 1 }}
-              onPress={() => addToCart(p, qty)}
+              icon="bag"
+              onPress={() => addToCart(p, qty, { toast: true })}
               right={
                 <T v="small" color="rgba(255,255,255,0.85)" style={{ fontFamily: fonts.bold }}>
                   {money(p.price * qty)}
@@ -181,6 +219,7 @@ export default function ProductScreen() {
 }
 
 const styles = StyleSheet.create({
+  priceTag: { backgroundColor: colors.greenSoft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, alignSelf: 'center' },
   floatBtn: {
     position: 'absolute',
     width: 44,

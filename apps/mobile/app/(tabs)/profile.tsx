@@ -3,13 +3,15 @@ import { StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import Constants from 'expo-constants';
 import Svg, { Circle, Path } from 'react-native-svg';
+import { OfficeProfileLinks } from '../../src/components/admin/OfficeExtras';
 import { PartnerStatusCard } from '../../src/components/gates';
 import { Icon } from '../../src/components/Icon';
 import { Screen } from '../../src/components/layout';
 import { Logo } from '../../src/components/Logo';
 import { Button, Card, Divider, Row, T } from '../../src/components/ui';
-import { formatPhone } from '../../src/lib/format';
+import { formatPhone, plural } from '../../src/lib/format';
 import { isOffice, useAuth, usePersona } from '../../src/store/auth';
+import { usePrefs } from '../../src/store/prefs';
 import { confirmDialog } from '../../src/store/ui';
 import { PARTNER_STATUS_LABELS, ROLE_LABELS } from '../../src/shared';
 import { colors, fonts, radius, shadows, space } from '../../src/theme';
@@ -85,23 +87,25 @@ export default function Profile() {
         </Card>
       )}
 
-      {isOffice(persona) && (
-        <View style={styles.hint}>
-          <Icon name="info" size={18} color={colors.blueberry} />
-          <T v="small" color={colors.blueberry} style={{ flex: 1, fontFamily: fonts.semibold }}>
-            Основная работа — в веб-панели BULO на компьютере. В приложении — быстрые действия с заказами.
-          </T>
-        </View>
-      )}
+      {isOffice(persona) && <OfficeProfileLinks />}
 
       <Card padded={false} style={{ paddingVertical: 4 }}>
         <Row icon="edit" title="Имя и почта" subtitle={user.email || 'Почта не указана'} onPress={() => router.push('/profile-edit')} />
         <Divider inset={68} />
         <Row icon="phone" title="Сменить телефон" subtitle={user.phone ? formatPhone(user.phone) : 'Телефон не привязан'} onPress={() => router.push('/change-phone')} />
+        <Divider inset={68} />
+        <Row
+          icon="lock"
+          title="Сменить пароль"
+          subtitle={user.login ? `Логин: ${user.login}` : 'Для входа по логину и паролю'}
+          onPress={() => router.push('/change-password')}
+        />
         {isBuyer && (
           <>
             <Divider inset={68} />
             <Row icon="pin" title="Адреса доставки" onPress={() => router.push('/addresses')} />
+            <Divider inset={68} />
+            <FavoritesRow />
           </>
         )}
         <Divider inset={68} />
@@ -116,6 +120,18 @@ export default function Profile() {
 
       <Footer />
     </Screen>
+  );
+}
+
+function FavoritesRow() {
+  const count = usePrefs((s) => s.favorites.length);
+  return (
+    <Row
+      icon="heart"
+      title="Избранное"
+      subtitle={count ? `${count} ${plural(count, 'товар', 'товара', 'товаров')}` : 'Отмечайте сердечком любимое'}
+      onPress={() => router.navigate({ pathname: '/catalog', params: { fav: '1' } })}
+    />
   );
 }
 

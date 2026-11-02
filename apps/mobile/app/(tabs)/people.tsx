@@ -1,11 +1,6 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { PeopleView } from '../../src/components/admin/People';
 
-// Временная заглушка — экран заполняется в следующем шаге.
-export default function Screen() {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Text>Люди</Text>
-    </View>
-  );
+export default function PeopleTab() {
+  return <PeopleView />;
 }

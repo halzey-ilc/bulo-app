@@ -1,14 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import { Addresses, errorMessage, Orders } from '../src/api';
 import { Icon } from '../src/components/Icon';
 import { BottomBar, Header, Screen } from '../src/components/layout';
 import { ProductImage } from '../src/components/product';
-import { Button, Card, Divider, ErrorState, Field, Skeleton, T, Touchable } from '../src/components/ui';
-import { addDaysIso, dateChip, dateLong, dayLabel, money, qtyText } from '../src/lib/format';
+import { Button, Card, Divider, EmptyState, ErrorState, Field, hapticSuccess, Skeleton, T, Touchable } from '../src/components/ui';
+import { setCached } from '../src/lib/cache';
+import { useCutoff } from '../src/lib/cutoff';
+import { dateChip, dateLong, dayLabel, money, qtyText } from '../src/lib/format';
 import { goTab } from '../src/lib/nav';
-import { useLoad } from '../src/lib/useLoad';
+import { invalidateOrders, Q, useQuery } from '../src/lib/queries';
+import { useAuth } from '../src/store/auth';
 import { cartTotal, useCart } from '../src/store/cart';
 import { confirmDialog, toast } from '../src/store/ui';
 import { colors, fonts, radius, space } from '../src/theme';
@@ -16,23 +19,22 @@ import { colors, fonts, radius, space } from '../src/theme';
 export default function Checkout() {
   const lines = useCart((s) => s.lines);
   const clear = useCart((s) => s.clear);
-  const rules = useLoad(() => Orders.rules(), [], { refetchOnFocus: false });
-  const addresses = useLoad(() => Addresses.list(), []);
-  const [date, setDate] = useState<string | null>(null);
+  const cartDate = useCart((s) => s.deliveryDate);
+  const uid = useAuth((s) => s.user?.id ?? 'anon');
+  const rules = useQuery(Q.rules(), { refetchOnFocus: false, staleTime: 10_000 });
+  // Адреса показываем сразу из кэша и тихо сверяем (их могли поменять на экране «Адреса»).
+  const addresses = useQuery(Q.addresses(uid), { staleTime: 0 });
+  const cutoff = useCutoff(rules.data, 14);
   const [addressId, setAddressId] = useState<string | null>(null);
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const placed = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
-  const days = useMemo(() => {
-    const start = rules.data?.earliestDeliveryDate;
-    if (!start) return [];
-    return Array.from({ length: 14 }, (_, i) => addDaysIso(start, i));
-  }, [rules.data?.earliestDeliveryDate]);
-
-  useEffect(() => {
-    if (days.length && !date) setDate(days[0]);
-  }, [days, date]);
+  // Дата выбирается ещё в корзине; если она уже недоступна (прошла отсечка) — ближайшая.
+  const days = rules.data ? cutoff.days : [];
+  const date = days.length ? (cartDate && days.includes(cartDate) ? cartDate : days[0]) : null;
+  const setDate = (d: string) => useCart.getState().setDeliveryDate(d);
 
   useEffect(() => {
     const list = addresses.data;
@@ -70,8 +72,16 @@ export default function Checkout() {
         comment: comment.trim() || undefined,
         items: lines.map((l) => ({ productId: l.productId, qty: l.qty })),
       });
-      clear();
+      placed.current = true;
+      hapticSuccess();
+      invalidateOrders();
+      setCached(Q.order(order.id).key, order);
       router.replace({ pathname: '/order-success', params: { id: order.id, number: String(order.number), date: order.deliveryDate } });
+      // Корзину чистим после перехода — без мелькания «пустой корзины».
+      setTimeout(() => {
+        clear();
+        useCart.getState().setDeliveryDate(null);
+      }, 400);
     } catch (e) {
       setError(errorMessage(e));
       rules.reload();
@@ -81,10 +91,11 @@ export default function Checkout() {
   };
 
   if (!lines.length) {
+    if (placed.current) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
     return (
       <View style={{ flex: 1 }}>
         <Header title="Оформление" />
-        <ErrorState message="Корзина пуста — добавьте товары из каталога." onRetry={() => goTab('/catalog')} />
+        <EmptyState icon="bag" title="Корзина пуста" text="Добавьте товары из каталога — и возвращайтесь." action="В каталог" onAction={() => goTab('/catalog')} />
       </View>
     );
   }
@@ -133,7 +144,7 @@ export default function Checkout() {
                 <View style={styles.hint}>
                   <Icon name="calendar" size={18} color={colors.cambodia} />
                   <T v="small" style={{ flex: 1, fontFamily: fonts.semibold }}>
-                    {dayLabel(date)}, {dateLong(date)}. Заказ на завтра принимаем до {rules.data?.cutoffTime}.
+                    {/^[0-9]/.test(dayLabel(date)) ? dateLong(date) : `${dayLabel(date)}, ${dateLong(date)}`}. Заказ на завтра принимаем до {rules.data?.cutoffTime}.
                   </T>
                 </View>
               )}

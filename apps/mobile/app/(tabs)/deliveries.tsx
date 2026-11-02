@@ -1,16 +1,18 @@
-import React, { useMemo, useState } from 'react';
-import { FlatList, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { FlatList, ScrollView, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Order, Orders } from '../../src/api';
+import { errorMessage, Order, Orders } from '../../src/api';
 import { callPhone, openMaps } from '../../src/components/contacts';
 import { Icon } from '../../src/components/Icon';
-import { TAB_BAR_SPACE } from '../../src/components/layout';
+import { BrandRefresh, TAB_BAR_SPACE } from '../../src/components/layout';
+import { ProgressBar } from '../../src/components/motion';
 import { OrderCardSkeleton, StatusChip } from '../../src/components/order';
-import { Button, Card, Chip, EmptyState, ErrorState, T, Touchable } from '../../src/components/ui';
+import { Button, Card, Chip, EmptyState, ErrorState, hapticSuccess, T, Touchable } from '../../src/components/ui';
 import { dayLabel, formatPhone, plural } from '../../src/lib/format';
-import { runOrderAction } from '../../src/lib/orderActions';
+import { invalidateOrders } from '../../src/lib/queries';
 import { useLoad } from '../../src/lib/useLoad';
+import { toast } from '../../src/store/ui';
 import { useAuth } from '../../src/store/auth';
 import { colors, fonts, radius, space } from '../../src/theme';
 
@@ -20,7 +22,8 @@ export default function Deliveries() {
   const insets = useSafeAreaInsets();
   const name = useAuth((s) => s.user?.name);
   const [tab, setTab] = useState<Tab>('ALL');
-  const list = useLoad(() => Orders.list(['READY', 'SHIPPED']), []);
+  // Новые готовые заказы подтягиваются сами, пока экран открыт.
+  const list = useLoad(() => Orders.list(['READY', 'SHIPPED']), [], { poll: 60_000 });
   const all = list.data ?? [];
   const data = useMemo(() => (tab === 'ALL' ? all : all.filter((o) => o.status === tab)), [all, tab]);
   const ready = all.filter((o) => o.status === 'READY').length;
@@ -74,7 +77,7 @@ export default function Deliveries() {
         contentContainerStyle={{ paddingHorizontal: space.lg, paddingTop: insets.top + space.md, paddingBottom: TAB_BAR_SPACE + insets.bottom, gap: space.md }}
         ListHeaderComponent={header}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={list.refreshing} onRefresh={list.refresh} tintColor={colors.mango} colors={[colors.mango]} />}
+        refreshControl={<BrandRefresh refreshing={list.refreshing} onRefresh={list.refresh} offset={insets.top} />}
         renderItem={({ item }) => <DeliveryCard order={item} onChanged={list.reload} />}
         ListEmptyComponent={
           list.loading ? (
@@ -142,12 +145,62 @@ function DeliveryCard({ order, onChanged }: { order: Order; onChanged: () => voi
           </T>
         </View>
       )}
-      {order.status === 'READY' ? (
-        <Button title="Забрал" icon="box" kind="dark" onPress={() => runOrderAction(order, 'SHIPPED', onChanged)} />
-      ) : (
-        <Button title="Доставлено" icon="check" onPress={() => runOrderAction(order, 'DELIVERED', onChanged)} />
-      )}
+      <UndoableAction order={order} onChanged={onChanged} />
     </Card>
+  );
+}
+
+/**
+ * «Забрал» / «Доставлено» без диалога, но с 5 секундами на «Отменить»:
+ * курьер в дороге — одно касание, а случайное нажатие легко вернуть.
+ */
+function UndoableAction({ order, onChanged }: { order: Order; onChanged: () => void }) {
+  const next = order.status === 'READY' ? 'SHIPPED' : 'DELIVERED';
+  const [left, setLeft] = useState(0);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (left <= 0) return;
+    const t = setTimeout(async () => {
+      if (left > 1) return setLeft(left - 1);
+      setLeft(0);
+      setBusy(true);
+      try {
+        await Orders.setStatus(order.id, next);
+        hapticSuccess();
+        toast.success(next === 'SHIPPED' ? `Заказ №${order.number} у вас — в путь!` : `Заказ №${order.number} доставлен`);
+        invalidateOrders();
+        onChanged();
+      } catch (e) {
+        toast.error(errorMessage(e));
+      } finally {
+        setBusy(false);
+      }
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [left, next, order.id, order.number, onChanged]);
+
+  if (left > 0) {
+    return (
+      <View style={styles.undo}>
+        <ProgressBar value={left / 5} color={colors.mango} track="rgba(249,245,230,0.25)" height={4} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
+          <T v="bodyStrong" color={colors.oatMilk} style={{ flex: 1 }}>
+            {next === 'SHIPPED' ? 'Отмечаем «Забрал»…' : 'Отмечаем «Доставлено»…'} {left}
+          </T>
+          <Touchable onPress={() => setLeft(0)} style={styles.undoBtn} haptic hitSlop={6}>
+            <T v="small" color={colors.cambodia} style={{ fontFamily: fonts.extrabold }}>
+              Отменить
+            </T>
+          </Touchable>
+        </View>
+      </View>
+    );
+  }
+  return next === 'SHIPPED' ? (
+    <Button title="Забрал" icon="box" kind="dark" loading={busy} onPress={() => setLeft(5)} />
+  ) : (
+    <Button title="Доставлено" icon="check" loading={busy} onPress={() => setLeft(5)} />
   );
 }
 
@@ -161,6 +214,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.oatMilk,
     borderRadius: radius.md,
     padding: 10,
+    minHeight: 56,
   },
-  lineIcon: { width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  lineIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  undo: { backgroundColor: colors.cambodia, borderRadius: radius.lg, padding: space.md, gap: space.md, minHeight: 54 },
+  undoBtn: { backgroundColor: colors.lime, borderRadius: radius.pill, paddingHorizontal: 14, height: 36, justifyContent: 'center' },
 });

@@ -1,6 +1,8 @@
 import { api } from './client';
 import type {
   Address,
+  CourierRoute,
+  Tracking,
   AuthResponse,
   Category,
   Info,
@@ -59,14 +61,35 @@ export const Orders = {
   get: (id: string) => api.get<Order>(`/orders/${id}`),
   create: (dto: { deliveryDate: string; addressId?: string; comment?: string; items: { productId: string; qty: number }[] }) =>
     api.post<Order>('/orders', dto),
-  setStatus: (id: string, status: OrderStatus, extra: { comment?: string; paymentMethod?: string } = {}) =>
-    api.post<Order>(`/orders/${id}/status`, { status, ...extra }),
+  setStatus: (
+    id: string,
+    status: OrderStatus,
+    extra: { comment?: string; paymentMethod?: string; code?: string; receivedBy?: string } = {},
+  ) => api.post<Order>(`/orders/${id}/status`, { status, ...extra }),
+  tracking: (id: string) => api.get<Tracking>(`/orders/${id}/tracking`),
+};
+
+export const Courier = {
+  route: () => api.get<CourierRoute>('/courier/route'),
+  shift: (on: boolean) => api.post<{ onShift: boolean }>('/courier/shift', { on }),
+  location: (p: { lat: number; lng: number; accuracy?: number; heading?: number; speed?: number }) =>
+    api.post('/courier/location', p),
+  arrived: (orderId: string) => api.post(`/courier/orders/${orderId}/arrived`),
+};
+
+export type AddressDto = {
+  address: string;
+  label?: string;
+  isDefault?: boolean;
+  lat?: number | null;
+  lng?: number | null;
+  entrance?: string | null;
 };
 
 export const Addresses = {
   list: () => api.get<Address[]>('/me/addresses'),
-  create: (dto: { address: string; label?: string; isDefault?: boolean }) => api.post<Address>('/me/addresses', dto),
-  update: (id: string, dto: { address: string; label?: string; isDefault?: boolean }) =>
+  create: (dto: AddressDto) => api.post<Address>('/me/addresses', dto),
+  update: (id: string, dto: AddressDto) =>
     api.patch<Address>(`/me/addresses/${id}`, dto),
   remove: (id: string) => api.del(`/me/addresses/${id}`),
 };

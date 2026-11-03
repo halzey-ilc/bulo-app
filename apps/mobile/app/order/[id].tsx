@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Order } from '../../src/api';
 import { FadeIn, Pulse } from '../../src/components/motion';
 import { hapticSuccess } from '../../src/components/ui';
@@ -13,7 +13,7 @@ import { Icon } from '../../src/components/Icon';
 import { BottomBar, Header, Screen } from '../../src/components/layout';
 import { STATUS_STYLE, StatusChip } from '../../src/components/order';
 import { ProductImage } from '../../src/components/product';
-import { Button, Card, Divider, ErrorState, Row, Skeleton, T } from '../../src/components/ui';
+import { Button, Card, Divider, ErrorState, Row, Skeleton, T, Touchable } from '../../src/components/ui';
 import { dateLong, dateTime, dayLabel, deliveryPhrase, formatPhone, money, qtyText } from '../../src/lib/format';
 import { actionKind, runOrderAction } from '../../src/lib/orderActions';
 import { repeatOrder } from '../../src/lib/repeat';
@@ -68,6 +68,9 @@ export default function OrderDetail() {
             Доставка {deliveryPhrase(order.deliveryDate)}
           </T>
         </View>
+
+        {/* Доставка: курьер везёт — живой трекинг; заказ собран — скоро передадим */}
+        {(buyer || isOffice(persona)) && (order.status === 'SHIPPED' || order.status === 'READY') && <TrackCard order={order} />}
 
         {/* Оплата: способ ещё не выбран — место под онлайн-оплату */}
         {order.status === 'APPROVED' && (
@@ -206,6 +209,28 @@ export default function OrderDetail() {
   );
 }
 
+/** Карточка «Отследить курьера» (в пути) / «Скоро передадим курьеру» (собран). */
+function TrackCard({ order }: { order: Order }) {
+  const shipped = order.status === 'SHIPPED';
+  return (
+    <Touchable onPress={() => router.push(`/track/${order.id}`)} haptic scaleTo={0.98} style={[styles.track, !shipped && styles.trackSoft]}>
+      <View style={[styles.trackIcon, !shipped && { backgroundColor: colors.white }]}>
+        {shipped && <Pulse size={48} color={colors.white} />}
+        <Icon name={shipped ? 'navigation' : 'box'} size={24} color={shipped ? colors.mango : colors.blueberry} />
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <T v="h3" color={shipped ? colors.white : colors.cambodia}>
+          {shipped ? 'Отследить курьера' : 'Скоро передадим курьеру'}
+        </T>
+        <T v="small" color={shipped ? 'rgba(255,255,255,0.88)' : colors.textMuted}>
+          {shipped ? 'Где сейчас заказ, когда приедет и код для вручения' : 'Заказ собран. Когда курьер заберёт его, здесь появится карта'}
+        </T>
+      </View>
+      <Icon name="chevronRight" size={20} color={shipped ? colors.white : colors.textSoft} />
+    </Touchable>
+  );
+}
+
 /** Вертикальная шкала: этапы ORDER_FLOW с отметками времени из истории. */
 function Timeline({ order }: { order: Order }) {
   const terminal = order.status === 'REJECTED' || order.status === 'CANCELLED';
@@ -309,6 +334,9 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   payment: { flexDirection: 'row', gap: space.md, borderWidth: 1.5, borderColor: colors.primarySoft },
+  track: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.mango, borderRadius: radius.xl, padding: space.lg },
+  trackSoft: { backgroundColor: colors.iceCube },
+  trackIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' },
   payIcon: {
     width: 48,
     height: 48,

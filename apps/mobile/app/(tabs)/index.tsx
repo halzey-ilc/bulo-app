@@ -281,6 +281,15 @@ function ActiveOrderCard({ order }: { order: Order }) {
           <Icon name="chevronRight" size={18} color={colors.textSoft} />
         </View>
         <FlowDots status={order.status} />
+        {order.status === 'SHIPPED' && (
+          <Touchable onPress={() => router.push(`/track/${order.id}`)} haptic style={styles.trackBtn}>
+            <Icon name="navigation" size={18} color={colors.white} />
+            <T v="bodyStrong" color={colors.white} style={{ flex: 1, fontFamily: fonts.bold }}>
+              Отследить курьера
+            </T>
+            <Icon name="chevronRight" size={18} color={colors.white} />
+          </Touchable>
+        )}
       </Card>
     </FadeIn>
   );
@@ -369,6 +378,7 @@ function CutoffCard({
 }
 
 const styles = StyleSheet.create({
+  trackBtn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.mango, borderRadius: radius.lg, paddingHorizontal: space.lg, height: 48 },
   top: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   logoPill: {
     height: 44,

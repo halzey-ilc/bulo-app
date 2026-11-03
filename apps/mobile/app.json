@@ -18,7 +18,13 @@
       "bundleIdentifier": "kg.bulo.app",
       "supportsTablet": false,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationQueriesSchemes": [
+          "dgis",
+          "yandexnavi",
+          "yandexmaps",
+          "comgooglemaps"
+        ]
       }
     },
     "android": {
@@ -59,7 +65,13 @@
           "color": "#E94F15"
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "BULO показывает курьеру маршрут и передаёт получателю, где сейчас заказ."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": false

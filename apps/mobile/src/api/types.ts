@@ -123,6 +123,8 @@ export interface Info {
   telegram: string | null;
   cutoffTime: string;
   minOrderSum: number;
+  bakeryLat?: number | null;
+  bakeryLng?: number | null;
 }
 
 export interface Address {
@@ -130,6 +132,78 @@ export interface Address {
   address: string;
   label: string | null;
   isDefault: boolean;
+  lat?: number | null;
+  lng?: number | null;
+  /** Подъезд, этаж, ориентир */
+  entrance?: string | null;
+}
+
+/* ───────── Доставка ───────── */
+
+export interface GeoPoint {
+  lat: number;
+  lng: number;
+}
+
+export interface CourierPosition extends GeoPoint {
+  heading: number | null;
+  speed: number | null;
+  accuracy?: number | null;
+  at: string;
+}
+
+export interface CourierStop {
+  orderId: string;
+  number: number;
+  status: 'SHIPPED' | 'READY';
+  partner: { name: string; contactName: string | null; phone: string | null };
+  address: string | null;
+  entrance: string | null;
+  comment: string | null;
+  point: GeoPoint | null;
+  itemsCount: number;
+  unitsCount: number;
+  total: number;
+  deliveryDate: string;
+  arrivedAt: string | null;
+  distanceKm: number | null;
+  etaMinutes: number | null;
+  etaAt: string | null;
+}
+
+export interface CourierRoute {
+  bakery: GeoPoint;
+  position: CourierPosition | null;
+  onShift: boolean;
+  route: { geometry: [number, number][]; byRoads: boolean; totalKm: number; totalMinutes: number };
+  stops: CourierStop[];
+  toPickup: CourierStop[];
+}
+
+export type DeliveryStage = 'preparing' | 'ready' | 'on_way' | 'arriving' | 'arrived' | 'delivered' | 'cancelled';
+
+export interface Tracking {
+  orderId: string;
+  number: number;
+  status: string;
+  stage: DeliveryStage;
+  address: string | null;
+  entrance: string | null;
+  destination: GeoPoint | null;
+  bakery: GeoPoint;
+  courier: { name: string | null; phone: string | null } | null;
+  position: CourierPosition | null;
+  route: { geometry: [number, number][]; byRoads: boolean } | null;
+  etaMinutes: number | null;
+  etaAt: string | null;
+  distanceKm: number | null;
+  stopsBefore: number;
+  shippedAt: string | null;
+  arrivedAt: string | null;
+  deliveredAt: string | null;
+  receivedBy: string | null;
+  /** Только владельцу заказа и администратору */
+  deliveryCode?: string | null;
 }
 
 export interface Notification {

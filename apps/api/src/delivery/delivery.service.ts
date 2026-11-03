@@ -195,9 +195,9 @@ export class DeliveryService {
         const eta = cumulativeEta(route.legMinutes);
         etaMinutes = Math.max(1, Math.round(eta[idx]));
         distanceKm = round(route.legKm.reduce((a, b) => a + b, 0));
-        // на карте получателю показываем только участок до его адреса
-        const last = await this.routing.route([all[idx - 1] ?? start, dest]);
-        geometry = idx === 0 ? route.geometry : last.geometry;
+        // путь курьера от текущей точки через предыдущие остановки до адреса получателя —
+        // так метка курьера всегда лежит на линии
+        geometry = route.geometry;
         byRoads = route.byRoads;
       }
     }

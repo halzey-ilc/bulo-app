@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import {
   BadRequestException,
   ForbiddenException,
@@ -109,6 +110,9 @@ export class OrdersService {
         createdById: user.id,
         deliveryDate: toDbDate(dto.deliveryDate),
         deliveryAddress: address.address,
+        deliveryLat: address.lat,
+        deliveryLng: address.lng,
+        deliveryEntrance: address.entrance,
         comment: dto.comment,
         total,
         items: { create: lines },
@@ -151,7 +155,12 @@ export class OrdersService {
       orderBy: [{ deliveryDate: 'desc' }, { number: 'desc' }],
       take: 300,
     });
-    return orders.map(serializeOrder);
+    return orders.map((o) => this.forUser(user, serializeOrder(o)));
+  }
+
+  /** Код вручения называет получатель — курьеру его не показываем. */
+  private forUser<T extends { deliveryCode: string | null }>(user: AuthUser, o: T): T {
+    return user.role === 'COURIER' ? { ...o, deliveryCode: null } : o;
   }
 
   private scope(user: AuthUser, where: Prisma.OrderWhereInput): Prisma.OrderWhereInput {
@@ -176,7 +185,7 @@ export class OrdersService {
       include: orderInclude,
     });
     if (!order) throw new NotFoundException('Заказ не найден');
-    return { ...serializeOrder(order), actions: allowedTransitions(order.status, user.role) };
+    return { ...this.forUser(user, serializeOrder(order)), actions: allowedTransitions(order.status, user.role) };
   }
 
   /** Менеджер правит состав заказа по согласованию с клиентом. */
@@ -229,7 +238,12 @@ export class OrdersService {
     if ((dto.status === 'REJECTED' || (dto.status === 'CANCELLED' && isStaff(user))) && !dto.comment) {
       throw new BadRequestException('Укажите причину');
     }
-    return this.transition(order.id, dto.status, user, dto);
+    // Курьер вручает заказ только по коду, который назовёт получатель
+    if (dto.status === 'DELIVERED' && user.role === 'COURIER' && order.deliveryCode) {
+      if (!dto.code) throw new BadRequestException('Спросите у получателя код вручения');
+      if (dto.code.trim() !== order.deliveryCode) throw new BadRequestException('Неверный код вручения');
+    }
+    return this.forUser(user, await this.transition(order.id, dto.status, user, dto));
   }
 
   /**
@@ -240,7 +254,7 @@ export class OrdersService {
     orderId: string,
     to: OrderStatus,
     user: AuthUser,
-    extra: { comment?: string; paymentMethod?: string; productionSheetId?: string } = {},
+    extra: { comment?: string; paymentMethod?: string; productionSheetId?: string; receivedBy?: string } = {},
   ) {
     const now = new Date();
     const before = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
@@ -259,9 +273,13 @@ export class OrdersService {
     }
     if (to === 'SHIPPED') {
       data.shippedAt = now;
+      data.deliveryCode = String(randomInt(1000, 10000));
       if (user.role === 'COURIER') data.courier = { connect: { id: user.id } };
     }
-    if (to === 'DELIVERED') data.deliveredAt = now;
+    if (to === 'DELIVERED') {
+      data.deliveredAt = now;
+      if (extra.receivedBy) data.receivedBy = extra.receivedBy;
+    }
 
     const order = await this.prisma.order.update({ where: { id: orderId }, data, include: orderInclude });
     await this.audit.log(user.id, `order.${to.toLowerCase()}`, 'Order', orderId, {
@@ -272,7 +290,7 @@ export class OrdersService {
     if (to === 'APPROVED') await this.outbox.enqueueOrder(orderId, 'CUSTOMER_ORDER');
     if (to === 'SHIPPED') await this.outbox.enqueueOrder(orderId, 'SALE');
 
-    await this.notifyStatus(order.partnerId, order.number, order.id, to, extra.comment);
+    await this.notifyStatus(order.partnerId, order.number, order.id, to, extra.comment, order.deliveryCode);
     if (to === 'PAID') {
       await this.notifications.toRoles(['WORKSHOP'], {
         title: `Заказ №${order.number} оплачен`,
@@ -290,13 +308,20 @@ export class OrdersService {
     return serializeOrder(order);
   }
 
-  private notifyStatus(partnerId: string, number: number, orderId: string, to: OrderStatus, comment?: string) {
+  private notifyStatus(
+    partnerId: string,
+    number: number,
+    orderId: string,
+    to: OrderStatus,
+    comment?: string,
+    deliveryCode?: string | null,
+  ) {
     const texts: Partial<Record<OrderStatus, string>> = {
       APPROVED: 'Заказ одобрен и ждёт оплаты',
       PAID: 'Оплата получена — заказ передаётся в цех',
       IN_PRODUCTION: 'Мы уже готовим ваш заказ',
       READY: 'Заказ готов к отгрузке',
-      SHIPPED: 'Заказ передан курьеру',
+      SHIPPED: `Курьер уже в пути — следите на карте.${deliveryCode ? ` Код вручения: ${deliveryCode}` : ''}`,
       DELIVERED: 'Заказ доставлен. Приятного аппетита!',
       REJECTED: `Заказ отклонён${comment ? `: ${comment}` : ''}`,
       CANCELLED: `Заказ отменён${comment ? `: ${comment}` : ''}`,

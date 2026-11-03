@@ -10,6 +10,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { AuthGuard } from './common/auth.guard';
 import { RolesGuard } from './common/roles.guard';
 import { CommonModule } from './common/common.module';
+import { DeliveryModule } from './delivery/delivery.module';
 import { OneCModule } from './onec/onec.module';
 import { OrdersModule } from './orders/orders.module';
 import { ProductionModule } from './production/production.module';
@@ -28,6 +29,7 @@ import { ReportsModule } from './reports/reports.module';
       serveRoot: '/uploads',
     }),
     CommonModule,
+    DeliveryModule,
     AuthModule,
     CatalogModule,
     OrdersModule,

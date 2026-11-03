@@ -3,6 +3,8 @@ import {
   IsDateString,
   IsEmail,
   IsIn,
+  IsLatitude,
+  IsLongitude,
   IsNumber,
   IsOptional,
   IsString,
@@ -99,4 +101,7 @@ export class SettingsDto {
   @IsOptional() @IsString() instagram?: string;
   @IsOptional() @IsString() whatsapp?: string;
   @IsOptional() @IsString() telegram?: string;
+  /** Точка выдачи (пекарня) — старт маршрута курьера */
+  @IsOptional() @IsLatitude() bakeryLat?: number;
+  @IsOptional() @IsLongitude() bakeryLng?: number;
 }

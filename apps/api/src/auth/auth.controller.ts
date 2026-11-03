@@ -2,6 +2,7 @@ import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post 
 import { AuthUser, publicUser } from '../common/auth-user';
 import { CurrentUser, Public, Roles } from '../common/decorators';
 import { PrismaService } from '../common/prisma.service';
+import { RoutingService } from '../delivery/routing.service';
 import { AuthService } from './auth.service';
 import {
   AddressDto,
@@ -91,11 +92,21 @@ export class AuthController {
 @Controller('me/addresses')
 @Roles('PARTNER', 'GUEST', 'CLIENT')
 export class AddressesController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly routing: RoutingService,
+  ) {}
 
   private partnerId(user: AuthUser) {
     if (!user.partnerId) throw new BadRequestException('Учётная запись не привязана к контрагенту');
     return user.partnerId;
+  }
+
+  /** Если точку на карте не поставили — пробуем найти по адресу. */
+  private async withPoint(dto: AddressDto) {
+    if (dto.lat != null && dto.lng != null) return dto;
+    const p = await this.routing.geocode(dto.address);
+    return p ? { ...dto, ...p } : dto;
   }
 
   @Get()
@@ -112,7 +123,7 @@ export class AddressesController {
     if (dto.isDefault) {
       await this.prisma.address.updateMany({ where: { partnerId }, data: { isDefault: false } });
     }
-    return this.prisma.address.create({ data: { ...dto, partnerId } });
+    return this.prisma.address.create({ data: { ...(await this.withPoint(dto)), partnerId } });
   }
 
   @Patch(':id')
@@ -121,7 +132,10 @@ export class AddressesController {
     if (dto.isDefault) {
       await this.prisma.address.updateMany({ where: { partnerId }, data: { isDefault: false } });
     }
-    await this.prisma.address.updateMany({ where: { id, partnerId }, data: dto });
+    const before = await this.prisma.address.findFirst({ where: { id, partnerId } });
+    // адрес поменяли без новой точки — старая точка больше не подходит
+    const data = before && before.address !== dto.address && dto.lat == null ? await this.withPoint(dto) : dto;
+    await this.prisma.address.updateMany({ where: { id, partnerId }, data });
     return this.prisma.address.findFirst({ where: { id, partnerId } });
   }
 

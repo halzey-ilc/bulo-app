@@ -71,6 +71,18 @@ export class StatusDto {
   @IsString()
   @MaxLength(60)
   paymentMethod?: string;
+
+  /** Для DELIVERED курьером: код вручения, который назвал получатель */
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  code?: string;
+
+  /** Для DELIVERED: кто принял заказ */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  receivedBy?: string;
 }
 
 export const orderInclude = {

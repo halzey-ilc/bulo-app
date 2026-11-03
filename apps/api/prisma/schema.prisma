@@ -88,6 +88,9 @@ model User {
   notifications Notification[]
   audit         AuditLog[]
   statusChanges OrderStatusHistory[]
+  positions     CourierPosition[]
+  /// Курьер «на линии» — передаёт геопозицию
+  onShiftSince  DateTime?
 }
 
 /// Лавка-партнёр (контрагент). Создаётся заявкой из приложения, одобряется админом.
@@ -121,6 +124,11 @@ model Address {
   partner   Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
   label     String?
   address   String
+  /// Точка на карте: ставит партнёр или определяется по адресу (геокодирование)
+  lat       Float?
+  lng       Float?
+  /// Подъезд, этаж, ориентир — для курьера
+  entrance  String?
   isDefault Boolean  @default(false)
   createdAt DateTime @default(now())
 }
@@ -204,6 +212,16 @@ model Order {
   courier         User?       @relation("OrderCourier", fields: [courierId], references: [id])
   shippedAt       DateTime?
   deliveredAt     DateTime?
+  /// Координаты адреса доставки на момент заказа
+  deliveryLat     Float?
+  deliveryLng     Float?
+  deliveryEntrance String?
+  /// Код вручения: партнёр называет его курьеру при получении
+  deliveryCode    String?
+  /// Курьер на месте (у двери)
+  arrivedAt       DateTime?
+  /// Кто принял заказ (имя со слов получателя)
+  receivedBy      String?
 
   productionSheetId String?
   productionSheet   ProductionSheet? @relation(fields: [productionSheetId], references: [id])
@@ -273,7 +291,26 @@ model Settings {
   instagram     String?
   whatsapp      String?
   telegram      String?
+  /// Точка выдачи (пекарня) — откуда выезжает курьер
+  bakeryLat     Float    @default(42.8746)
+  bakeryLng     Float    @default(74.5698)
   updatedAt     DateTime @updatedAt
+}
+
+/// Геопозиция курьера, пока он на линии. Последняя точка — текущее положение, остальные — трек.
+model CourierPosition {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lat       Float
+  lng       Float
+  accuracy  Float?
+  heading   Float?
+  /// м/с
+  speed     Float?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model OtpCode {

@@ -161,7 +161,9 @@ async function main() {
       status: 'APPROVED',
       approvedAt: new Date(),
       priceTypeId: wholesale.id,
-      addresses: { create: { address: 'г. Бишкек, ул. Киевская, 95', isDefault: true } },
+      addresses: {
+        create: { address: 'г. Бишкек, ул. Киевская, 95', lat: 42.8771, lng: 74.6048, entrance: 'Вход со двора', isDefault: true },
+      },
     },
     update: {},
   });
@@ -177,7 +179,9 @@ async function main() {
       approvedAt: new Date(),
       priceTypeId: retail.id,
       note: 'Личный кабинет клиента',
-      addresses: { create: { address: 'г. Бишкек, мкр. Асанбай, 12', isDefault: true } },
+      addresses: {
+        create: { address: 'г. Бишкек, мкр. Асанбай, 12', lat: 42.8213, lng: 74.6281, entrance: 'Подъезд 2, этаж 5, кв. 34', isDefault: true },
+      },
     },
     update: {},
   });

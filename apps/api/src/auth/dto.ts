@@ -1,4 +1,14 @@
-import { IsEmail, IsIn, IsOptional, IsString, Length, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsIn,
+  IsLatitude,
+  IsLongitude,
+  IsOptional,
+  IsString,
+  Length,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class RequestOtpDto {
   @IsString()
@@ -96,4 +106,18 @@ export class AddressDto {
 
   @IsOptional()
   isDefault?: boolean;
+
+  /** Точка на карте; если не передана — определим по адресу */
+  @IsOptional()
+  @IsLatitude()
+  lat?: number;
+
+  @IsOptional()
+  @IsLongitude()
+  lng?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  entrance?: string;
 }

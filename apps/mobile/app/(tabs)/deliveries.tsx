@@ -11,6 +11,7 @@ import { Icon, IconName } from '../../src/components/Icon';
 import { BrandRefresh } from '../../src/components/layout';
 import { DeliveryMap, DeliveryMapHandle, MapMarker } from '../../src/components/map/DeliveryMap';
 import { MapSheet, MapSheetHandle } from '../../src/components/map/MapSheet';
+import { FadeIn } from '../../src/components/motion';
 import { Button, Card, EmptyState, ErrorState, hapticImpact, hapticSuccess, Skeleton, T, Touchable } from '../../src/components/ui';
 import { useCourierTracking } from '../../src/lib/courierLocation';
 import { addressCount, clock, kmText, minText, minutesUntil } from '../../src/lib/delivery';
@@ -134,7 +135,7 @@ export default function Deliveries() {
   const geoProblem = onShift && (live.permission === 'denied' || live.permission === 'blocked' || live.permission === 'off');
   const fixGeo = () => (live.permission === 'blocked' ? Linking.openSettings() : live.retry());
   const courierPos = live.fix ?? (onShift ? data?.position : null) ?? null;
-  const padding = useMemo(() => ({ top: insets.top + 132, bottom: sheetH + tabH + 24, left: 36, right: 36 }), [insets.top, sheetH, tabH]);
+  const padding = useMemo(() => ({ top: insets.top + 96, bottom: sheetH + tabH + 64, left: 36, right: 36 }), [insets.top, sheetH, tabH]);
 
   const onMarkerPress = useCallback(
     (id: string) => {
@@ -180,7 +181,10 @@ export default function Deliveries() {
       ? `${pickups.length} ${plural(pickups.length, 'заказ ждёт', 'заказа ждут', 'заказов ждут')} в пекарне`
       : 'Заказов к доставке нет';
 
+  // шапка «въезжает» заново, когда меняется её смысл: другая точка, на месте, пекарня, смена
+  const headerKey = q.loading ? 'loading' : focus ? `${focus.orderId}:${focus.arrivedAt ? 1 : 0}` : pickups.length ? 'pickup' : onShift ? 'done' : 'off';
   const header = (
+    <FadeIn key={headerKey} offset={10}>
     <SheetHeader
       loading={q.loading}
       onShift={onShift}
@@ -197,6 +201,7 @@ export default function Deliveries() {
       onPickAll={() => pickUp(pickups.map((p) => p.orderId))}
       pickBusy={pickups.some((p) => busy[p.orderId])}
     />
+    </FadeIn>
   );
 
   return (
@@ -232,10 +237,6 @@ export default function Deliveries() {
             </View>
             {shiftBusy ? <ActivityIndicator color={onShift ? colors.oatMilk : colors.mango} /> : <Toggle value={onShift} onChange={toggleShift} disabled={!data} />}
           </View>
-          <View style={{ gap: space.sm }}>
-            <MapButton icon="navigation" active={following} onPress={toggleFollow} label="Следовать за мной" />
-            <MapButton icon="pin" active={false} onPress={recenter} label="Весь маршрут" highlight={moved} />
-          </View>
         </View>
         {geoProblem && (
           <Touchable haptic onPress={fixGeo} style={styles.geoPill}>
@@ -254,6 +255,24 @@ export default function Deliveries() {
         bottomInset={tabH}
         onSnap={(h) => setSheetH(h)}
         header={header}
+        above={
+          <View style={styles.above} pointerEvents="box-none">
+            {focus && !focus.arrivedAt && focus.etaAt ? (
+              <View style={styles.etaChip}>
+                <Icon name="clock" size={15} color={colors.oatMilk} />
+                <T v="caption" color={colors.oatMilk} style={{ fontFamily: fonts.extrabold, letterSpacing: 0 }}>
+                  {minText(minutesUntil(focus.etaAt, now) ?? focus.etaMinutes)} · {kmText(focus.distanceKm)}
+                </T>
+              </View>
+            ) : (
+              <View />
+            )}
+            <View style={{ flexDirection: 'row', gap: space.sm }}>
+              <MapButton icon="pin" active={false} onPress={recenter} label="Весь маршрут" highlight={moved} />
+              <MapButton icon="navigation" active={following} onPress={toggleFollow} label="Следовать за мной" />
+            </View>
+          </View>
+        }
         refreshControl={<BrandRefresh refreshing={q.refreshing} onRefresh={q.refresh} />}
       >
         {q.loading ? (
@@ -709,6 +728,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
     ...shadows.card,
   },
+  above: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  etaChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.cambodia, paddingHorizontal: 12, height: 36, borderRadius: radius.pill, ...shadows.card },
   geoWarn: { flexDirection: 'row', gap: space.sm, alignItems: 'center', backgroundColor: colors.dangerSoft, padding: space.md, borderRadius: radius.lg },
   geoPill: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: colors.dangerSoft, paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.pill, ...shadows.soft },
   head: { paddingHorizontal: space.lg, paddingBottom: space.md, paddingTop: 2, gap: space.md },

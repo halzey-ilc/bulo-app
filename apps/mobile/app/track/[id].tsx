@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Animated, Easing, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DeliveryStage, Orders, Tracking } from '../../src/api';
-import { Avatar } from '../../src/components/admin/kit';
+import { Avatar, PulseDot } from '../../src/components/admin/kit';
 import { callPhone } from '../../src/components/contacts';
 import { Icon, IconName } from '../../src/components/Icon';
 import { BrandRefresh, Header } from '../../src/components/layout';
 import { DeliveryMap, DeliveryMapHandle, MapMarker } from '../../src/components/map/DeliveryMap';
+import { MapSheet } from '../../src/components/map/MapSheet';
 import { FadeIn, Pulse } from '../../src/components/motion';
 import { Button, Card, ErrorState, hapticSuccess, Skeleton, T, Touchable } from '../../src/components/ui';
 import { clock, kmText, minText, minutesUntil } from '../../src/lib/delivery';
@@ -39,7 +40,7 @@ export default function TrackOrder() {
 
   const live = !!t && LIVE.includes(t.stage);
   const hasMap = !!t?.destination;
-  const mapH = Math.round(H * 0.46);
+  const [sheetH, setSheetH] = useState(Math.round(H * 0.54));
 
   const markers = useMemo<MapMarker[]>(() => {
     if (!t) return [];
@@ -68,7 +69,7 @@ export default function TrackOrder() {
 
   const body = (
     <View style={{ gap: space.md }}>
-      <StageHero t={t} now={now} />
+      {!hasMap && <StageHero t={t} now={now} />}
       <StageBar stage={t.stage} />
       {!!t.deliveryCode && t.stage !== 'delivered' && t.stage !== 'cancelled' && <CodeCard code={t.deliveryCode} urgent={t.stage === 'arrived' || t.stage === 'arriving'} />}
       {live && t.stopsBefore > 0 && (
@@ -126,42 +127,57 @@ export default function TrackOrder() {
     );
   }
 
+  const snaps = [250, Math.round(H * 0.54), Math.round(H - insets.top - 72)];
+  const mins = minutesUntil(t.etaAt, now) ?? t.etaMinutes;
+  const courierLabel = live && t.stage !== 'arrived' && mins != null ? (mins <= 1 ? 'рядом' : minText(mins)) : null;
+
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <View style={{ height: mapH + 28 }}>
-        <DeliveryMap
-          ref={map}
-          markers={markers}
-          route={live ? t.route?.geometry : null}
-          byRoads={t.route?.byRoads}
-          courier={live && t.position ? t.position : null}
-          courierAnimMs={POLL}
-          keepInView
-          padding={{ top: insets.top + 70, bottom: 64, left: 40, right: 40 }}
-        />
-        <View style={[styles.mapTop, { top: insets.top + 8 }]} pointerEvents="box-none">
-          <Touchable haptic onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} style={styles.roundBtn} accessibilityLabel="Назад">
-            <Icon name="chevronLeft" size={22} />
-          </Touchable>
-          <View style={styles.titlePill}>
-            <T v="bodyStrong" style={{ fontFamily: fonts.extrabold }}>
-              Заказ №{t.number}
-            </T>
-          </View>
-          <Touchable haptic onPress={() => map.current?.fit()} style={styles.roundBtn} accessibilityLabel="Показать всё">
-            <Icon name="navigation" size={20} />
-          </Touchable>
+    <View style={{ flex: 1, backgroundColor: '#EFE9DA' }}>
+      <DeliveryMap
+        ref={map}
+        markers={markers}
+        route={live ? t.route?.geometry : null}
+        byRoads={t.route?.byRoads}
+        courier={live && t.position ? t.position : null}
+        courierAnimMs={POLL}
+        courierLabel={courierLabel}
+        keepInView
+        padding={{ top: insets.top + 76, bottom: sheetH + 24, left: 44, right: 44 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={[styles.mapTop, { top: insets.top + 8 }]} pointerEvents="box-none">
+        <Touchable haptic onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} style={styles.roundBtn} accessibilityLabel="Назад">
+          <Icon name="chevronLeft" size={22} />
+        </Touchable>
+        <View style={styles.titlePill}>
+          {live && <PulseDot color={colors.mango} size={7} />}
+          <T v="bodyStrong" style={{ fontFamily: fonts.extrabold }}>
+            Заказ №{t.number}
+          </T>
         </View>
+        <View style={{ width: 46 }} />
       </View>
-      <View style={styles.panel}>
-        <ScrollView
-          contentContainerStyle={{ padding: space.lg, paddingTop: space.lg, paddingBottom: insets.bottom + 40 }}
-          showsVerticalScrollIndicator={false}
-          refreshControl={<BrandRefresh refreshing={q.refreshing} onRefresh={q.refresh} />}
-        >
-          {body}
-        </ScrollView>
-      </View>
+      <MapSheet
+        snaps={snaps}
+        initial={1}
+        bottomInset={insets.bottom}
+        onSnap={(h) => setSheetH(h)}
+        header={
+          <View style={{ paddingHorizontal: space.lg, paddingBottom: space.md }}>
+            <StageHero t={t} now={now} />
+          </View>
+        }
+        above={
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }} pointerEvents="box-none">
+            <Touchable haptic onPress={() => map.current?.fit()} style={styles.roundBtn} accessibilityLabel="Показать всё">
+              <Icon name="navigation" size={20} />
+            </Touchable>
+          </View>
+        }
+        refreshControl={<BrandRefresh refreshing={q.refreshing} onRefresh={q.refresh} />}
+      >
+        {body}
+      </MapSheet>
     </View>
   );
 }
@@ -230,7 +246,7 @@ function StageHero({ t, now }: { t: Tracking; now: number }) {
   }
   const live = t.stage === 'on_way' || t.stage === 'arriving';
   return (
-    <FadeIn>
+    <FadeIn key={t.stage}>
       <View style={[styles.hero, { backgroundColor: bg }]}>
         <View style={styles.heroIcon}>
           {live && <Pulse size={52} color="#FFFFFF" />}
@@ -240,9 +256,11 @@ function StageHero({ t, now }: { t: Tracking; now: number }) {
           <T v="caption" color={fg} style={{ fontFamily: fonts.extrabold, opacity: 0.8 }}>
             {caption}
           </T>
-          <T style={styles.heroTitle} color={fg}>
-            {title}
-          </T>
+          <FadeIn key={title} offset={8}>
+            <T style={styles.heroTitle} color={fg}>
+              {title}
+            </T>
+          </FadeIn>
           <T v="body" color={fg} style={{ opacity: 0.9 }}>
             {sub}
           </T>
@@ -281,9 +299,7 @@ function StageBar({ stage }: { stage: DeliveryStage }) {
     <Card style={{ gap: space.md, paddingVertical: space.lg }}>
       <View style={{ flexDirection: 'row', gap: 4 }}>
         {STEPS.map((_, i) => (
-          <View key={i} style={[styles.seg, { backgroundColor: i < cur ? colors.mango : i === cur ? colors.primarySoft : 'rgba(38,66,43,0.1)' }]}>
-            {i === cur && <View style={[styles.segFill, { backgroundColor: colors.mango }]} />}
-          </View>
+          <Segment key={i} state={i < cur ? 'done' : i === cur ? 'current' : 'todo'} delay={i * 90} />
         ))}
       </View>
       <View style={{ flexDirection: 'row' }}>
@@ -303,6 +319,48 @@ function StageBar({ stage }: { stage: DeliveryStage }) {
   );
 }
 
+/** Сегмент шкалы: заполняется пружиной, текущий — «бегущий» блик. */
+function Segment({ state, delay }: { state: 'done' | 'current' | 'todo'; delay: number }) {
+  const [w, setW] = useState(0);
+  const fill = useRef(new Animated.Value(0)).current;
+  const run = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(fill, {
+      toValue: state === 'done' ? 1 : state === 'current' ? 0.5 : 0,
+      duration: 520,
+      delay,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [state, delay, fill]);
+  useEffect(() => {
+    if (state !== 'current') return;
+    const loop = Animated.loop(Animated.timing(run, { toValue: 1, duration: 1300, easing: Easing.inOut(Easing.quad), useNativeDriver: true }));
+    loop.start();
+    return () => loop.stop();
+  }, [state, run]);
+  return (
+    <View style={[styles.seg, { backgroundColor: state === 'current' ? colors.primarySoft : 'rgba(38,66,43,0.1)' }]} onLayout={(e) => setW(e.nativeEvent.layout.width)}>
+      {w > 0 && (
+        <Animated.View
+          style={[
+            styles.segFill,
+            { width: w, backgroundColor: colors.mango, transform: [{ translateX: fill.interpolate({ inputRange: [0, 1], outputRange: [-w, 0] }) }] },
+          ]}
+        />
+      )}
+      {w > 0 && state === 'current' && (
+        <Animated.View
+          style={[
+            styles.segShine,
+            { transform: [{ translateX: run.interpolate({ inputRange: [0, 1], outputRange: [-w * 0.4, w] }) }], opacity: run.interpolate({ inputRange: [0, 0.2, 0.8, 1], outputRange: [0, 1, 1, 0] }) },
+          ]}
+        />
+      )}
+    </View>
+  );
+}
+
 /* ───────── Код вручения ───────── */
 
 function CodeCard({ code, urgent }: { code: string; urgent: boolean }) {
@@ -313,6 +371,7 @@ function CodeCard({ code, urgent }: { code: string; urgent: boolean }) {
   };
   return (
     <Card style={[styles.codeCard, urgent && { borderColor: colors.mango, borderWidth: 2 }]}>
+      {urgent && <Breathe />}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
         <Icon name="key" size={18} color={colors.mango} />
         <T v="bodyStrong" style={{ flex: 1 }}>
@@ -327,9 +386,11 @@ function CodeCard({ code, urgent }: { code: string; urgent: boolean }) {
       </View>
       <View style={{ flexDirection: 'row', justifyContent: 'center', gap: space.sm }}>
         {code.split('').map((d, i) => (
-          <View key={i} style={styles.codeCell}>
-            <T style={styles.codeDigit}>{d}</T>
-          </View>
+          <PopIn key={i} delay={120 + i * 80}>
+            <View style={[styles.codeCell, urgent && { borderColor: colors.mango, backgroundColor: colors.white }]}>
+              <T style={styles.codeDigit}>{d}</T>
+            </View>
+          </PopIn>
         ))}
       </View>
       <T v="small" color={colors.textMuted} center>
@@ -337,6 +398,31 @@ function CodeCard({ code, urgent }: { code: string; urgent: boolean }) {
       </T>
     </Card>
   );
+}
+
+/** Появление с пружинкой: масштаб 0.6 → 1. */
+function PopIn({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(v, { toValue: 1, delay, useNativeDriver: true, damping: 12, stiffness: 220, mass: 0.8 }).start();
+  }, [v, delay]);
+  return <Animated.View style={{ opacity: v.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 1, 1] }), transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }] }}>{children}</Animated.View>;
+}
+
+/** Мягкое свечение вокруг карточки, когда курьер рядом. */
+function Breathe() {
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(v, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(v, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [v]);
+  return <Animated.View pointerEvents="none" style={[styles.glow, { opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0, 0.55] }) }]} />;
 }
 
 function InfoRow({ icon, tint, fg, title, sub }: { icon: IconName; tint: string; fg: string; title: string; sub?: string | null }) {
@@ -392,13 +478,14 @@ function useStageNotice(t: Tracking | undefined) {
 const styles = StyleSheet.create({
   mapTop: { position: 'absolute', left: space.md, right: space.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   roundBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', ...shadows.card },
-  titlePill: { backgroundColor: colors.white, borderRadius: radius.pill, paddingHorizontal: space.lg, height: 40, justifyContent: 'center', ...shadows.card },
-  panel: { flex: 1, marginTop: -28, backgroundColor: colors.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', ...shadows.float },
+  titlePill: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.white, borderRadius: radius.pill, paddingHorizontal: space.lg, height: 40, ...shadows.card },
   hero: { borderRadius: radius.xxl, padding: space.xl, flexDirection: 'row', gap: space.lg, alignItems: 'center' },
   heroIcon: { width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.85)', alignItems: 'center', justifyContent: 'center' },
   heroTitle: { fontFamily: fonts.extrabold, fontSize: 26, lineHeight: 31, letterSpacing: -0.5 },
   seg: { flex: 1, height: 6, borderRadius: 3, overflow: 'hidden' },
-  segFill: { width: '50%', height: 6, borderRadius: 3 },
+  segFill: { position: 'absolute', left: 0, top: 0, height: 6, borderRadius: 3 },
+  segShine: { position: 'absolute', top: 0, width: '40%', height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.75)' },
+  glow: { position: 'absolute', top: -2, left: -2, right: -2, bottom: -2, borderRadius: radius.xl + 2, borderWidth: 4, borderColor: colors.mango },
   note: { flexDirection: 'row', gap: space.sm, alignItems: 'center', backgroundColor: colors.iceCube, padding: space.md, borderRadius: radius.lg },
   courier: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   call: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.mango, alignItems: 'center', justifyContent: 'center', ...shadows.soft },

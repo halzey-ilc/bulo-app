@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { ActivityIndicator, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Animated, Easing, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { colors } from '../../theme';
 import { MapFrame, MapFrameHandle } from './MapFrame';
 
@@ -44,6 +44,7 @@ export function DeliveryMap({
   byRoads = true,
   courier,
   courierAnimMs = 1000,
+  courierLabel,
   padding = DEFAULT_PADDING,
   autoFit = true,
   keepInView = false,
@@ -61,6 +62,8 @@ export function DeliveryMap({
   courier?: Courier;
   /** За сколько мс курьер «доезжает» до новой точки (≈ интервал обновлений). */
   courierAnimMs?: number;
+  /** Подпись над курьером, например «4 мин». */
+  courierLabel?: string | null;
   /** Отступы от краёв (шторка, шапка), чтобы точки не прятались под ними. */
   padding?: MapPadding;
   /** Подгонять масштаб, когда меняется набор точек (пока пользователь сам не двигал карту). */
@@ -116,9 +119,10 @@ export function DeliveryMap({
   const cLat = courier?.lat;
   const cLng = courier?.lng;
   const cHead = courier?.heading ?? null;
+  const cLabel = courierLabel ?? null;
   useEffect(() => {
-    post({ type: 'courier', courier: cLat != null && cLng != null ? { lat: cLat, lng: cLng, heading: cHead, ms: courierAnimMs } : null });
-  }, [cLat, cLng, cHead, courierAnimMs, post]);
+    post({ type: 'courier', courier: cLat != null && cLng != null ? { lat: cLat, lng: cLng, heading: cHead, ms: courierAnimMs, label: cLabel } : null });
+  }, [cLat, cLng, cHead, courierAnimMs, cLabel, post]);
 
   const onMessage = useCallback(
     (data: string) => {
@@ -166,12 +170,24 @@ export function DeliveryMap({
   return (
     <View style={[styles.wrap, style]}>
       <MapFrame ref={frame} onMessage={onMessage} />
-      {!loaded && !failed && (
-        <View style={styles.loading} pointerEvents="none">
-          <ActivityIndicator color={colors.mango} />
-        </View>
-      )}
+      <LoadingVeil done={loaded || failed} />
     </View>
+  );
+}
+
+/** Подложка, пока грузится карта: растворяется, а не пропадает рывком. */
+function LoadingVeil({ done }: { done: boolean }) {
+  const v = useRef(new Animated.Value(1)).current;
+  const [gone, setGone] = useState(false);
+  useEffect(() => {
+    if (!done) return;
+    Animated.timing(v, { toValue: 0, duration: 380, delay: 120, easing: Easing.out(Easing.quad), useNativeDriver: true }).start(() => setGone(true));
+  }, [done, v]);
+  if (gone) return null;
+  return (
+    <Animated.View style={[styles.loading, { opacity: v }]} pointerEvents="none">
+      <ActivityIndicator color={colors.mango} />
+    </Animated.View>
   );
 }
 

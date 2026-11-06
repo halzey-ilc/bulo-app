@@ -8,13 +8,18 @@
  *   node scripts/courier-simulator.mjs --deliver   — в конце вручить заказы (код берётся у администратора)
  *   --speed=N — во сколько раз быстрее реального времени (по умолчанию 8)
  *
- * Переменные: BULO_API (по умолчанию http://localhost:4000/api).
+ * Переменные: BULO_API (по умолчанию http://localhost:4000/api),
+ * ADMIN_PASSWORD (нужен для --prepare и --deliver).
  */
 const API = process.env.BULO_API ?? 'http://localhost:4000/api';
 const args = process.argv.slice(2);
 const has = (f) => args.includes(f);
 const SPEED = Number(args.find((a) => a.startsWith('--speed='))?.split('=')[1] ?? 8);
 const DEMO_PASSWORD = 'bulo2026';
+function adminPassword() {
+  if (!process.env.ADMIN_PASSWORD) throw new Error('Задайте ADMIN_PASSWORD: тот же пароль, что в apps/api/.env');
+  return process.env.ADMIN_PASSWORD;
+}
 
 async function call(method, path, { token, body } = {}) {
   const res = await fetch(API + path, {
@@ -40,7 +45,7 @@ async function prepare() {
     token: partner,
     body: { deliveryDate: rules.earliestDeliveryDate, items: [{ productId: p.id, qty }], comment: 'Демо-доставка' },
   });
-  const admin = await login('admin', process.env.ADMIN_PASSWORD ?? 'bulo-admin-2026');
+  const admin = await login('admin', adminPassword());
   await call('POST', `/orders/${order.id}/status`, { token: admin, body: { status: 'APPROVED' } });
   await call('POST', `/orders/${order.id}/status`, { token: admin, body: { status: 'PAID', paymentMethod: 'демо' } });
   await call('POST', `/orders/${order.id}/status`, { token: admin, body: { status: 'IN_PRODUCTION' } });
@@ -103,7 +108,7 @@ async function drive() {
       await call('POST', `/courier/orders/${s.orderId}/arrived`, { token: courier });
       console.log(`На месте: заказ №${s.number}, ${s.address}`);
       if (has('--deliver')) {
-        const admin = await login('admin', process.env.ADMIN_PASSWORD ?? 'bulo-admin-2026');
+        const admin = await login('admin', adminPassword());
         const t = await call('GET', `/orders/${s.orderId}/tracking`, { token: admin });
         await sleep(tick * 3);
         await call('POST', `/orders/${s.orderId}/status`, {

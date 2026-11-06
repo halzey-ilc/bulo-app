@@ -110,7 +110,7 @@ export function StatusScrim() {
   return (
     <View
       pointerEvents="none"
-      style={{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top, backgroundColor: 'rgba(249,245,230,0.97)', zIndex: 10, elevation: 10 }}
+      style={{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top, backgroundColor: colors.bg, zIndex: 10 }}
     />
   );
 }

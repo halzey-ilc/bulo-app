@@ -1,9 +1,12 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { Auth, AuthResponse, setToken, setUnauthorizedHandler, User } from '../api';
+import { setApiUrl } from '../api/client';
 import { secureStorage } from '../lib/storage';
 import { Role } from '../shared';
 
 const TOKEN_KEY = 'bulo.token';
+export const API_URL_KEY = 'bulo.apiUrl';
 
 interface AuthState {
   ready: boolean;
@@ -23,6 +26,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   user: null,
 
   bootstrap: async () => {
+    setApiUrl(await AsyncStorage.getItem(API_URL_KEY).catch(() => null));
     const token = await secureStorage.get(TOKEN_KEY);
     if (!token) return set({ ready: true });
     setToken(token);

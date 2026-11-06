@@ -3,7 +3,6 @@ import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { router } from 'expo-router';
 import Svg, { Circle, Path } from 'react-native-svg';
 import type { Order, Product } from '../../src/api';
-import { ContactsCard } from '../../src/components/contacts';
 import { NoOrderNote, PartnerStatusCard, SignInCta } from '../../src/components/gates';
 import { Icon, IconName } from '../../src/components/Icon';
 import { Screen } from '../../src/components/layout';
@@ -82,7 +81,7 @@ export default function Home() {
   ];
 
   return (
-    <Screen withTabBar topInset refreshing={refreshing} onRefresh={onRefresh} contentStyle={{ gap: space.xl }}>
+    <Screen withTabBar topInset refreshing={refreshing} onRefresh={onRefresh} contentStyle={{ gap: space.lg }}>
       {/* Приветствие. Правый верхний угол — только логотип (там может всплывать кнопка разработчика). */}
       <View style={styles.top}>
         <View style={{ flex: 1 }}>
@@ -97,7 +96,7 @@ export default function Home() {
           <IconButton name="bell" badge={notif.data?.unread} onPress={() => router.push('/notifications')} label="Уведомления" />
         )}
         <View style={styles.logoPill}>
-          <Logo width={44} />
+          <Logo width={38} />
         </View>
       </View>
 
@@ -154,7 +153,7 @@ export default function Home() {
                 onPress={() => router.navigate({ pathname: '/catalog', params: { categoryId: c.id } })}
                 scaleTo={0.96}
               >
-                <ProductImage category={c.name} photoUrl={c.imageUrl} style={{ width: 52, height: 52 }} iconSize={28} rounded={16} />
+                <ProductImage category={c.name} photoUrl={c.imageUrl} style={{ width: 44, height: 44 }} iconSize={24} rounded={14} />
                 <View style={{ flex: 1 }}>
                   <T v="bodyStrong" numberOfLines={2} style={{ fontSize: 14, lineHeight: 18 }}>
                     {c.name}
@@ -169,20 +168,6 @@ export default function Home() {
         </View>
       )}
 
-      {/* Контакты */}
-      {info.data && (
-        <View style={{ gap: space.md }}>
-          <SectionTitle title="Мы на связи" />
-          <ContactsCard info={info.data} />
-        </View>
-      )}
-
-      <View style={{ alignItems: 'center', paddingTop: space.md, gap: 4, opacity: 0.6 }}>
-        <Logo width={56} color={colors.cambodia} />
-        <T v="caption" color={colors.textMuted}>
-          Taste at Your Pace
-        </T>
-      </View>
     </Screen>
   );
 }
@@ -191,7 +176,7 @@ export default function Home() {
 function Stories({ items }: { items: { key: string; label: string; icon: IconName; bg: string; fg: string; onPress: () => void }[] }) {
   const { width } = useWindowDimensions();
   const gap = 8;
-  const size = Math.min(74, Math.floor((width - space.lg * 2 - gap * (items.length - 1)) / items.length));
+  const size = Math.min(58, Math.floor((width - space.lg * 2 - gap * (items.length - 1)) / items.length));
   return (
     <View style={[styles.stories, { gap }]}>
       {items.map((s) => (
@@ -244,15 +229,15 @@ const ProductRow = memo(function ProductRow({
         style={{ marginHorizontal: -space.lg }}
         contentContainerStyle={{ paddingHorizontal: space.lg, gap: space.md, paddingVertical: 4 }}
         decelerationRate="fast"
-        snapToInterval={168 + space.md}
+        snapToInterval={152 + space.md}
       >
         {loading
           ? [0, 1, 2].map((i) => (
-              <View key={i} style={{ width: 168 }}>
+              <View key={i} style={{ width: 152 }}>
                 <ProductCardSkeleton />
               </View>
             ))
-          : products.map((p) => <ProductCard key={p.id} product={p} canOrder={canOrder} width={168} />)}
+          : products.map((p) => <ProductCard key={p.id} product={p} canOrder={canOrder} width={152} />)}
         {!loading && !products.length && (
           <T v="body" color={colors.textMuted}>
             {empty}
@@ -269,8 +254,8 @@ function ActiveOrderCard({ order }: { order: Order }) {
       <Card onPress={() => router.push(`/order/${order.id}`)} style={{ gap: space.md }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
           <View style={styles.liveIcon}>
-            <Pulse size={44} color={colors.mango} />
-            <Icon name="receipt" size={22} color={colors.mango} />
+            <Pulse size={36} color={colors.mango} />
+            <Icon name="receipt" size={18} color={colors.mango} />
           </View>
           <View style={{ flex: 1, gap: 4 }}>
             <T v="bodyStrong">
@@ -356,7 +341,7 @@ function CutoffCard({
           {cutoff.open ? (cutoff.urgent ? 'УСПЕЙТЕ ОФОРМИТЬ' : 'ПРИЁМ ЗАКАЗОВ ОТКРЫТ') : 'ПРИЁМ НА ЗАВТРА ЗАКРЫТ'}
         </T>
       </View>
-      <T v="h1" color={colors.white} style={{ maxWidth: 250 }}>
+      <T v="h2" color={colors.white} style={{ maxWidth: 250 }}>
         {cutoff.open ? `На завтра — до ${cutoff.cutoffTime}` : `Доставим ${dayLabel(cutoff.earliest).toLowerCase()}`}
       </T>
       <T v="small" color="rgba(255,255,255,0.92)" style={{ maxWidth: 260, fontFamily: fonts.semibold }}>
@@ -371,19 +356,19 @@ function CutoffCard({
         small
         icon="arrowRight"
         onPress={() => router.navigate('/catalog')}
-        style={{ alignSelf: 'flex-start', marginTop: space.sm }}
+        style={{ alignSelf: 'flex-start', marginTop: space.xs }}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  trackBtn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.mango, borderRadius: radius.lg, paddingHorizontal: space.lg, height: 48 },
+  trackBtn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, backgroundColor: colors.mango, borderRadius: radius.md, paddingHorizontal: space.md, height: 40 },
   top: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   logoPill: {
-    height: 44,
-    paddingHorizontal: 12,
-    borderRadius: 22,
+    height: 40,
+    paddingHorizontal: 10,
+    borderRadius: 20,
     backgroundColor: colors.softYellow,
     alignItems: 'center',
     justifyContent: 'center',
@@ -401,9 +386,9 @@ const styles = StyleSheet.create({
   },
   storyInner: { flex: 1, borderRadius: 40, alignItems: 'center', justifyContent: 'center' },
   liveIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
@@ -429,9 +414,9 @@ const styles = StyleSheet.create({
   thumb: { width: 36, height: 36, borderWidth: 2, borderColor: colors.white },
   promo: {
     backgroundColor: colors.mango,
-    borderRadius: radius.xxl,
-    padding: space.xxl,
-    gap: 8,
+    borderRadius: radius.xl,
+    padding: space.lg,
+    gap: 6,
     overflow: 'hidden',
     ...shadows.card,
   },

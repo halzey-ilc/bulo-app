@@ -129,6 +129,7 @@ export function Button({
       onPress={off ? undefined : onPress}
       disabled={off}
       haptic
+      hitSlop={small ? 6 : 2}
       accessibilityRole="button"
       style={[
         styles.btn,
@@ -139,10 +140,10 @@ export function Button({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={p.fg} />
+        <ActivityIndicator size="small" color={p.fg} />
       ) : (
         <>
-          {icon && <Icon name={icon} size={small ? 18 : 20} color={p.fg} />}
+          {icon && <Icon name={icon} size={small ? 16 : 18} color={p.fg} />}
           <Text numberOfLines={1} style={[small ? type.small : type.bodyStrong, { color: p.fg, fontFamily: fonts.bold, flexShrink: 1 }]}>
             {title}
           </Text>
@@ -200,7 +201,7 @@ export function Chip({
       style={[styles.chip, active ? styles.chipActive : null]}
       accessibilityState={{ selected: !!active }}
     >
-      {icon && <Icon name={icon} size={16} color={active ? colors.white : colors.text} />}
+      {icon && <Icon name={icon} size={14} color={active ? colors.white : colors.text} />}
       <T v="small" style={{ fontFamily: fonts.bold }} color={active ? colors.white : colors.text}>
         {label}
       </T>
@@ -232,7 +233,7 @@ export function IconButton({
   badge,
   bg = colors.white,
   color = colors.text,
-  size = 44,
+  size = 40,
   label,
 }: {
   name: IconName;
@@ -247,10 +248,11 @@ export function IconButton({
     <Touchable
       onPress={onPress}
       haptic
+      hitSlop={4}
       accessibilityLabel={label}
       style={[styles.iconBtn, { width: size, height: size, backgroundColor: bg }, bg !== 'transparent' && shadows.soft]}
     >
-      <Icon name={name} size={22} color={color} />
+      <Icon name={name} size={20} color={color} />
       {!!badge && <Badge count={badge} style={{ position: 'absolute', top: -2, right: -2 }} />}
     </Touchable>
   );
@@ -387,7 +389,7 @@ export function EmptyState({
   return (
     <View style={styles.empty}>
       <View style={[styles.emptyBlob, { backgroundColor: tint }]}>
-        <Icon name={icon} size={44} color={colors.mango} strokeWidth={1.5} />
+        <Icon name={icon} size={34} color={colors.mango} strokeWidth={1.5} />
       </View>
       <T v="h3" center>
         {title}
@@ -440,7 +442,7 @@ export function Row({
     <>
       {icon && (
         <View style={[styles.rowIcon, { backgroundColor: danger ? colors.dangerSoft : tint }]}>
-          <Icon name={icon} size={20} color={danger ? colors.danger : iconColor} />
+          <Icon name={icon} size={18} color={danger ? colors.danger : iconColor} />
         </View>
       )}
       <View style={{ flex: 1, gap: 1 }}>
@@ -471,16 +473,16 @@ export function Divider({ inset = 0 }: { inset?: number }) {
 
 const styles = StyleSheet.create({
   btn: {
-    minHeight: 54,
-    borderRadius: radius.lg,
-    paddingHorizontal: space.xl,
+    minHeight: 46,
+    borderRadius: radius.md,
+    paddingHorizontal: space.lg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: space.sm,
+    gap: 6,
     borderWidth: 1.5,
   },
-  btnSmall: { minHeight: 40, borderRadius: radius.md, paddingHorizontal: space.lg },
+  btnSmall: { minHeight: 36, borderRadius: 12, paddingHorizontal: space.md },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
@@ -489,9 +491,9 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    height: 40,
+    gap: 4,
+    paddingHorizontal: 12,
+    height: 34,
     borderRadius: radius.pill,
     backgroundColor: colors.white,
     borderWidth: 1,
@@ -515,9 +517,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
-    minHeight: 54,
-    borderRadius: radius.lg,
-    paddingHorizontal: space.lg,
+    minHeight: 48,
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
     backgroundColor: colors.surfaceWarm,
     borderWidth: 1.5,
     borderColor: colors.border,
@@ -525,23 +527,23 @@ const styles = StyleSheet.create({
   inputText: {
     flex: 1,
     fontFamily: fonts.semibold,
-    fontSize: 16,
+    fontSize: 15,
     color: colors.text,
-    paddingVertical: 10,
+    paddingVertical: 8,
     // убираем рамку фокуса браузера в веб-версии
     outlineStyle: 'none',
   } as unknown as TextStyle,
   sectionTitle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   empty: { alignItems: 'center', gap: space.sm, paddingVertical: space.xxxl, paddingHorizontal: space.xl },
   emptyBlob: {
-    width: 104,
-    height: 104,
-    borderRadius: 40,
+    width: 80,
+    height: 80,
+    borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: space.sm,
     transform: [{ rotate: '-6deg' }],
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.lg },
-  rowIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 10, paddingHorizontal: space.lg },
+  rowIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
 });

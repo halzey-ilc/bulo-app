@@ -61,7 +61,7 @@ export default function ProductScreen() {
           </View>
         ) : (
           <View style={{ gap: space.lg }}>
-            <Skeleton style={{ height: 380, borderRadius: 0 }} />
+            <Skeleton style={{ height: 280, borderRadius: 0 }} />
             <View style={{ padding: space.lg, gap: space.md }}>
               <Skeleton style={{ height: 28, width: '70%' }} />
               <Skeleton style={{ height: 16, width: '40%' }} />
@@ -87,7 +87,7 @@ export default function ProductScreen() {
           photoUrl={p.photoUrl}
           category={p.category?.name}
           seed={p.id}
-          style={{ height: 380 + insets.top, width: '100%' }}
+          style={{ height: 280 + insets.top, width: '100%' }}
           iconSize={150}
           rounded={0}
         />
@@ -101,7 +101,7 @@ export default function ProductScreen() {
             {p.isNew && <NewBadge />}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.md }}>
-            <T v="display" style={{ fontSize: 28, lineHeight: 34, flex: 1 }}>
+            <T v="h1" style={{ flex: 1 }}>
               {p.name}
             </T>
             <FavoriteButton productId={p.id} size={44} style={{ backgroundColor: colors.white, marginTop: -2 }} />
@@ -202,8 +202,7 @@ export default function ProductScreen() {
             <Stepper value={qty} step={p.multiplicity} unit={p.unit} min={p.multiplicity || 1} onChange={setQty} />
             <Button
               title="В корзину"
-              style={{ flex: 1 }}
-              icon="bag"
+              style={{ flex: 1, paddingHorizontal: space.sm }}
               onPress={() => addToCart(p, qty, { toast: true })}
               right={
                 <T v="small" color="rgba(255,255,255,0.85)" style={{ fontFamily: fonts.bold }}>
@@ -222,8 +221,8 @@ const styles = StyleSheet.create({
   priceTag: { backgroundColor: colors.greenSoft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, alignSelf: 'center' },
   floatBtn: {
     position: 'absolute',
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: 22,
     backgroundColor: 'rgba(255,255,255,0.92)',
     alignItems: 'center',

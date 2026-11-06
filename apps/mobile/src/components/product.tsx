@@ -261,7 +261,7 @@ export function Stepper({
 }) {
   const s = step > 0 ? step : 1;
   const round = (n: number) => Math.round(n * 1000) / 1000;
-  const h = compact ? 40 : 52;
+  const h = compact ? 36 : 44;
   return (
     <View style={[styles.stepper, { height: h, borderRadius: h / 2 }]}>
       <Touchable
@@ -309,13 +309,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 4,
-    paddingTop: 10,
-    minHeight: 50,
+    paddingTop: 8,
+    minHeight: 42,
   },
   addBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: colors.mango,
     alignItems: 'center',
     justifyContent: 'center',
@@ -326,14 +326,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: colors.cambodia,
-    borderRadius: 20,
-    height: 40,
-    paddingHorizontal: 3,
+    borderRadius: 17,
+    height: 34,
+    paddingHorizontal: 2,
   },
   miniBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center',
     justifyContent: 'center',

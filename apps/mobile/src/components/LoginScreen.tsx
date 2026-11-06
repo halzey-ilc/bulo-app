@@ -28,7 +28,7 @@ export function LoginScreen({ initialTab }: { initialTab?: Tab }) {
   return (
     <AuthScaffold
       title="Вход в BULO"
-      subtitle="Войдите тем способом, который вам выдал администратор: по номеру телефона или по логину и паролю."
+      subtitle="По номеру телефона или по логину и паролю."
     >
       <Segmented<Tab>
         value={tab}

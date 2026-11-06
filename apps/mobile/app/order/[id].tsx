@@ -323,11 +323,11 @@ function useStatusChangeNotice(order: Order | undefined) {
 }
 
 const styles = StyleSheet.create({
-  hero: { borderRadius: radius.xxl, padding: space.xxl, gap: 6 },
+  hero: { borderRadius: radius.xl, padding: space.lg, gap: 4 },
   heroIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.75)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
   payment: { flexDirection: 'row', gap: space.md, borderWidth: 1.5, borderColor: colors.primarySoft },
   track: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.mango, borderRadius: radius.xl, padding: space.lg },
   trackSoft: { backgroundColor: colors.iceCube },
-  trackIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' },
+  trackIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' },
   payIcon: {
     width: 48,
     height: 48,

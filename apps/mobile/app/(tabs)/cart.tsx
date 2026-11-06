@@ -211,7 +211,6 @@ export default function CartScreen() {
                 ? toast.info(`Минимальный заказ — ${money(minSum)}. Добавьте ещё на ${money(left)}`)
                 : router.push('/checkout')
             }
-            style={{ paddingHorizontal: space.xl }}
           />
         </View>
       )}
@@ -223,7 +222,7 @@ const CartRow = memo(function CartRow({ line: l }: { line: CartLine }) {
   return (
     <Card style={styles.line}>
       <Touchable onPress={() => router.push(`/product/${l.productId}`)}>
-        <ProductImage photoUrl={l.photoUrl} category={l.categoryName} seed={l.productId} style={{ width: 76, height: 76 }} iconSize={34} rounded={18} />
+        <ProductImage photoUrl={l.photoUrl} category={l.categoryName} seed={l.productId} style={{ width: 64, height: 64 }} iconSize={28} rounded={16} />
       </Touchable>
       <View style={{ flex: 1, gap: 6 }}>
         <View>
@@ -255,8 +254,8 @@ const styles = StyleSheet.create({
   clear: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, height: 44 },
   line: { flexDirection: 'row', gap: space.md, padding: space.md },
   dateChip: {
-    width: 60,
-    paddingVertical: 8,
+    width: 54,
+    paddingVertical: 6,
     alignItems: 'center',
     borderRadius: radius.lg,
     backgroundColor: colors.oatMilk,
@@ -281,9 +280,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.md,
     backgroundColor: colors.cambodia,
-    borderRadius: radius.xxl,
-    padding: space.md,
-    paddingLeft: space.xl,
+    borderRadius: radius.xl,
+    padding: space.sm,
+    paddingLeft: space.lg,
     ...shadows.float,
   },
 });

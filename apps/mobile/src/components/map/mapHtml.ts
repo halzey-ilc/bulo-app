@@ -9,18 +9,19 @@
  * точками GPS), плавно поворачивается по ходу, пройденная часть маршрута «съедается»,
  * новый маршрут прорисовывается, пины падают на карту с отскоком.
  */
+import { LEAFLET_CSS, LEAFLET_JS } from './leafletBundle';
+
 export const MAP_HTML = `<!doctype html>
 <html lang="ru"><head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&display=swap" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="preconnect" href="https://tile.openstreetmap.org" crossorigin />
+<style>${LEAFLET_CSS}</style>
 <style>
   html, body, #map { margin: 0; padding: 0; width: 100%; height: 100%; background: #EFE9DA; overflow: hidden; }
   * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-  .leaflet-container { background: #EFE9DA; font-family: Manrope, system-ui, sans-serif; }
-  .leaflet-control-attribution { background: rgba(249,245,230,.78) !important; color: rgba(38,66,43,.7); font: 600 9px/1.3 Manrope, system-ui, sans-serif; padding: 1px 6px !important; border-radius: 8px 0 0 0; }
+  .leaflet-container { background: #EFE9DA; font-family: system-ui, sans-serif; }
+  .leaflet-control-attribution { background: rgba(249,245,230,.78) !important; color: rgba(38,66,43,.7); font: 600 9px/1.3 system-ui, sans-serif; padding: 1px 6px !important; border-radius: 8px 0 0 0; }
   .leaflet-control-attribution a { color: inherit; text-decoration: none; }
   .leaflet-div-icon { background: none; border: none; }
   /* тёплая, приглушённая подложка в тон бренду — маршрут и пины читаются лучше */
@@ -36,7 +37,7 @@ export const MAP_HTML = `<!doctype html>
   .pin { position: absolute; left: 0; top: 0; width: 36px; height: 36px; border-radius: 50% 50% 50% 6px; transform: rotate(-45deg);
          background: #E94F15; border: 3px solid #fff; box-shadow: 0 6px 14px rgba(90,59,30,.32); display: flex; align-items: center; justify-content: center; }
   .pin > * { transform: rotate(45deg); }
-  .pin b { color: #fff; font: 800 15px/1 Manrope, system-ui, sans-serif; }
+  .pin b { color: #fff; font: 800 15px/1 system-ui, sans-serif; }
   .pin.dim { background: #fff; border-color: #E94F15; width: 30px; height: 30px; left: 3px; top: 6px; }
   .pin.dim b { color: #26422B; font-size: 13px; }
   .pin.active { width: 44px; height: 44px; left: -4px; top: -9px; }
@@ -57,7 +58,7 @@ export const MAP_HTML = `<!doctype html>
                    box-shadow: 0 6px 16px rgba(38,66,43,.35), 0 0 0 1px rgba(38,66,43,.06); display: flex; align-items: center; justify-content: center; will-change: transform; }
   .courier .body svg { width: 22px; height: 22px; }
   .courier .lbl { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%) scale(.6); opacity: 0; white-space: nowrap; background: #26422B; color: #F9F5E6;
-                  font: 800 13px/1 Manrope, system-ui, sans-serif; padding: 7px 10px; border-radius: 12px; box-shadow: 0 6px 14px rgba(38,66,43,.3);
+                  font: 800 13px/1 system-ui, sans-serif; padding: 7px 10px; border-radius: 12px; box-shadow: 0 6px 14px rgba(38,66,43,.3);
                   transition: transform .35s cubic-bezier(.3,1.6,.6,1), opacity .25s ease; }
   .courier .lbl:after { content: ''; position: absolute; left: 50%; bottom: -5px; margin-left: -5px; border: 5px solid transparent; border-bottom: 0; border-top-color: #26422B; }
   .courier .lbl.on { transform: translateX(-50%) scale(1); opacity: 1; }
@@ -66,7 +67,7 @@ export const MAP_HTML = `<!doctype html>
 
   .me { width: 18px; height: 18px; border-radius: 50%; background: #004B97; border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0,75,151,.45); }
   #err { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; text-align: center; padding: 24px;
-         color: rgba(38,66,43,.7); font: 700 14px/1.4 Manrope, system-ui, sans-serif; }
+         color: rgba(38,66,43,.7); font: 700 14px/1.4 system-ui, sans-serif; }
 </style>
 </head><body>
 <div id="map"></div>
@@ -79,7 +80,7 @@ export const MAP_HTML = `<!doctype html>
   }
   function __fail() { document.getElementById('err').style.display = 'flex'; __send({ type: 'error' }); }
 </script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onerror="__fail()"></script>
+<script>${LEAFLET_JS}</script>
 <script>
 (function () {
   if (!window.L) { __fail(); return; }

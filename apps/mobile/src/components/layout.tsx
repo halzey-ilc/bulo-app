@@ -6,7 +6,7 @@ import { colors, space } from '../theme';
 import { Icon } from './Icon';
 import { T, Touchable } from './ui';
 
-export const TAB_BAR_SPACE = 110;
+export const TAB_BAR_SPACE = 100;
 
 /** Шапка вложенного экрана: круглая кнопка «назад», заголовок, правый слот. */
 export function Header({

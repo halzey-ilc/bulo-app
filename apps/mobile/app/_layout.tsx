@@ -105,7 +105,7 @@ export default function RootLayout() {
               contentStyle: { backgroundColor: colors.bg },
               // На Android «iOS-подобный» сдвиг выглядит плавнее стандартного.
               animation: Platform.OS === 'android' ? 'ios_from_right' : 'slide_from_right',
-              animationDuration: 280,
+              animationDuration: 220,
             }}
           >
             <Stack.Screen name="(tabs)" />

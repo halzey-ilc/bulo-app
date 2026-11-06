@@ -127,7 +127,7 @@ export default function TrackOrder() {
     );
   }
 
-  const snaps = [250, Math.round(H * 0.54), Math.round(H - insets.top - 72)];
+  const snaps = [200, Math.round(H * 0.54), Math.round(H - insets.top - 72)];
   const mins = minutesUntil(t.etaAt, now) ?? t.etaMinutes;
   const courierLabel = live && t.stage !== 'arrived' && mins != null ? (mins <= 1 ? 'рядом' : minText(mins)) : null;
 
@@ -155,7 +155,7 @@ export default function TrackOrder() {
             Заказ №{t.number}
           </T>
         </View>
-        <View style={{ width: 46 }} />
+        <View style={{ width: 40 }} />
       </View>
       <MapSheet
         snaps={snaps}
@@ -477,11 +477,11 @@ function useStageNotice(t: Tracking | undefined) {
 
 const styles = StyleSheet.create({
   mapTop: { position: 'absolute', left: space.md, right: space.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  roundBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', ...shadows.card },
-  titlePill: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.white, borderRadius: radius.pill, paddingHorizontal: space.lg, height: 40, ...shadows.card },
-  hero: { borderRadius: radius.xxl, padding: space.xl, flexDirection: 'row', gap: space.lg, alignItems: 'center' },
-  heroIcon: { width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.85)', alignItems: 'center', justifyContent: 'center' },
-  heroTitle: { fontFamily: fonts.extrabold, fontSize: 26, lineHeight: 31, letterSpacing: -0.5 },
+  roundBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', ...shadows.card },
+  titlePill: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.white, borderRadius: radius.pill, paddingHorizontal: space.md, height: 36, ...shadows.card },
+  hero: { borderRadius: radius.xl, padding: space.md, flexDirection: 'row', gap: space.md, alignItems: 'center' },
+  heroIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.85)', alignItems: 'center', justifyContent: 'center' },
+  heroTitle: { fontFamily: fonts.extrabold, fontSize: 20, lineHeight: 25, letterSpacing: -0.3 },
   seg: { flex: 1, height: 6, borderRadius: 3, overflow: 'hidden' },
   segFill: { position: 'absolute', left: 0, top: 0, height: 6, borderRadius: 3 },
   segShine: { position: 'absolute', top: 0, width: '40%', height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.75)' },
@@ -491,8 +491,8 @@ const styles = StyleSheet.create({
   call: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.mango, alignItems: 'center', justifyContent: 'center', ...shadows.soft },
   codeCard: { gap: space.md, borderWidth: 2, borderColor: 'transparent' },
   copy: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primarySoft, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill },
-  codeCell: { width: 62, height: 74, borderRadius: radius.lg, backgroundColor: colors.oatMilk, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: colors.border },
-  codeDigit: { fontFamily: fonts.extrabold, fontSize: 38, lineHeight: 44, color: colors.text },
+  codeCell: { width: 50, height: 58, borderRadius: radius.md, backgroundColor: colors.oatMilk, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: colors.border },
+  codeDigit: { fontFamily: fonts.extrabold, fontSize: 28, lineHeight: 34, color: colors.text },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.lg },
   rowIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
 });

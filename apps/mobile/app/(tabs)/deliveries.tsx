@@ -404,7 +404,7 @@ function SheetHeader({
     return (
       <View style={styles.head}>
         <Skeleton style={{ height: 22, width: '60%' }} />
-        <Skeleton style={{ height: 54, borderRadius: radius.lg }} />
+        <Skeleton style={{ height: 46, borderRadius: radius.md }} />
       </View>
     );
   }
@@ -708,19 +708,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.md,
     backgroundColor: colors.white,
-    borderRadius: radius.xl,
-    paddingVertical: 10,
-    paddingLeft: space.lg,
-    paddingRight: space.md,
-    minHeight: 62,
+    borderRadius: radius.lg,
+    paddingVertical: 6,
+    paddingLeft: space.md,
+    paddingRight: space.sm,
+    minHeight: 50,
     ...shadows.card,
   },
   shiftOn: { backgroundColor: colors.cambodia },
   offDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(38,66,43,0.3)', marginHorizontal: 7 },
   mapBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',

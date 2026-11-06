@@ -12,7 +12,14 @@ function devApiUrl(): string {
   return 'http://localhost:4000/api';
 }
 
-export const API_URL = (process.env.EXPO_PUBLIC_API_URL || devApiUrl()).replace(/\/$/, '');
+export const DEFAULT_API_URL = (process.env.EXPO_PUBLIC_API_URL || devApiUrl()).replace(/\/$/, '');
+
+export let API_URL = DEFAULT_API_URL;
+
+/** Адрес, заданный вручную на экране «Сервер». Пусто — адрес по умолчанию. */
+export function setApiUrl(url: string | null) {
+  API_URL = (url || DEFAULT_API_URL).replace(/\/$/, '');
+}
 
 export class ApiError extends Error {
   constructor(

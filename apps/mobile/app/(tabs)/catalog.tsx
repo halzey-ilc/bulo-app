@@ -107,7 +107,7 @@ function CatalogScreen() {
       <View>
         <T v="display">Каталог</T>
         <T v="body" color={colors.textMuted}>
-          {user ? `${copy.priceNote} · свежая выпечка к утру` : 'Свежая выпечка к вашему утру'}
+          {user ? copy.priceNote : 'Свежая выпечка к вашему утру'}
         </T>
       </View>
       <Field

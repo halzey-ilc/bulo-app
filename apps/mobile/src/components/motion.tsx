@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(38,66,43,0.07)',
     borderRadius: radius.lg,
     padding: 4,
-    height: 52,
+    height: 42,
   },
   segThumb: {
     position: 'absolute',

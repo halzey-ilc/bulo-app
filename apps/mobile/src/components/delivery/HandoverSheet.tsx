@@ -168,9 +168,9 @@ const noShadow = { elevation: 0, shadowOpacity: 0 };
 const styles = StyleSheet.create({
   cells: { flexDirection: 'row', justifyContent: 'center', gap: space.md, marginTop: space.sm },
   cell: {
-    width: 64,
-    height: 68,
-    borderRadius: radius.lg,
+    width: 54,
+    height: 58,
+    borderRadius: radius.md,
     backgroundColor: colors.white,
     borderWidth: 2,
     borderColor: colors.border,
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   cellFilled: { borderColor: colors.cambodia },
   cellFocus: { borderColor: colors.mango },
   cellError: { borderColor: colors.danger, backgroundColor: colors.dangerSoft },
-  digit: { fontFamily: fonts.extrabold, fontSize: 36, lineHeight: 42 },
+  digit: { fontFamily: fonts.extrabold, fontSize: 28, lineHeight: 34 },
   nameLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 6 },
   pad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: space.sm },
   key: { width: '31.5%', height: 52, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },

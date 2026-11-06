@@ -169,7 +169,7 @@ function CartTab({ focused, onPress }: { focused: boolean; onPress: () => void }
           style={[styles.center, focused && { backgroundColor: colors.coffee }]}
           scaleTo={0.92}
         >
-          <Icon name="bag" size={28} color={colors.white} strokeWidth={1.8} />
+          <Icon name="bag" size={24} color={colors.white} strokeWidth={1.8} />
           <Badge count={cartCount} style={styles.centerBadge} />
         </Touchable>
       </Animated.View>
@@ -208,15 +208,15 @@ const styles = StyleSheet.create({
   item: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 2, paddingBottom: 2, minHeight: 48 },
   iconPill: { width: PILL_W, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   center: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     backgroundColor: colors.mango,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -34,
-    marginBottom: 6,
-    borderWidth: 5,
+    marginTop: -22,
+    marginBottom: 4,
+    borderWidth: 4,
     borderColor: colors.oatMilk,
     ...shadows.float,
   },

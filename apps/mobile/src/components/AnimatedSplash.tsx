@@ -31,9 +31,9 @@ export function AnimatedSplash({ ready, onDone }: { ready: boolean; onDone: () =
       finished = true;
       onDone();
     };
-    const delay = intro.current ? 250 : 1300;
+    const delay = intro.current ? 150 : 650;
     const t = setTimeout(() => {
-      Animated.timing(fade, { toValue: 0, duration: 380, useNativeDriver: true }).start(finish);
+      Animated.timing(fade, { toValue: 0, duration: 240, useNativeDriver: true }).start(finish);
     }, delay);
     // Подстраховка: если анимации не идут (вкладка в фоне), всё равно убираем заставку.
     const fallback = setTimeout(finish, delay + 900);

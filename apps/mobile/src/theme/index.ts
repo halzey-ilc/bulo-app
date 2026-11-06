@@ -37,10 +37,10 @@ export const fonts = {
 } as const;
 
 export const type = {
-  display: { fontFamily: fonts.extrabold, fontSize: 30, lineHeight: 36, letterSpacing: -0.6 },
-  h1: { fontFamily: fonts.extrabold, fontSize: 24, lineHeight: 30, letterSpacing: -0.4 },
-  h2: { fontFamily: fonts.bold, fontSize: 20, lineHeight: 26, letterSpacing: -0.2 },
-  h3: { fontFamily: fonts.bold, fontSize: 17, lineHeight: 22 },
+  display: { fontFamily: fonts.extrabold, fontSize: 26, lineHeight: 32, letterSpacing: -0.5 },
+  h1: { fontFamily: fonts.extrabold, fontSize: 22, lineHeight: 28, letterSpacing: -0.3 },
+  h2: { fontFamily: fonts.bold, fontSize: 18, lineHeight: 24, letterSpacing: -0.2 },
+  h3: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 21 },
   body: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 21 },
   bodyStrong: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 21 },
   small: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18 },

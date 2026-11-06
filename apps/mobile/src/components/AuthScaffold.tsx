@@ -1,5 +1,6 @@
 import React from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { colors, space } from '../theme';
@@ -30,17 +31,20 @@ export function AuthScaffold({
       </Svg>
       <Header transparent onBack={onBack} />
       <ScrollView
-        contentContainerStyle={{ padding: space.xl, paddingTop: space.sm, gap: space.xl, flexGrow: 1 }}
+        contentContainerStyle={{ padding: space.lg, paddingTop: space.sm, gap: space.lg, flexGrow: 1 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <View style={{ gap: space.sm }}>
-          <Logo width={84} />
-          <T v="display" style={{ marginTop: space.md }}>
+          {/* долгое нажатие на логотип — адрес сервера */}
+          <Pressable onLongPress={() => router.push('/server')} delayLongPress={800} style={{ alignSelf: 'flex-start' }}>
+            <Logo width={64} />
+          </Pressable>
+          <T v="display" style={{ marginTop: space.xs }}>
             {title}
           </T>
           {typeof subtitle === 'string' ? (
-            <T v="body" color={colors.textMuted} style={{ fontSize: 16, lineHeight: 23 }}>
+            <T v="body" color={colors.textMuted} style={{ lineHeight: 21 }}>
               {subtitle}
             </T>
           ) : (

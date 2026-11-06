@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import Constants from 'expo-constants';
-import Svg, { Circle, Path } from 'react-native-svg';
+import Svg, { Circle } from 'react-native-svg';
 import { OfficeProfileLinks } from '../../src/components/admin/OfficeExtras';
 import { PartnerStatusCard } from '../../src/components/gates';
 import { Icon } from '../../src/components/Icon';
@@ -24,7 +24,8 @@ export default function Profile() {
 
   const initials = (user.name || user.partner?.name || 'B')
     .split(/\s+/)
-    .map((w) => w[0])
+    .map((w) => w.replace(/[^\p{L}\d]/gu, '')[0])
+    .filter(Boolean)
     .join('')
     .slice(0, 2)
     .toUpperCase();
@@ -51,7 +52,7 @@ export default function Profile() {
           <Circle cx={280} cy={160} r={40} fill={colors.mango} opacity={0.25} />
         </Svg>
         <View style={styles.avatar}>
-          <T style={{ fontFamily: fonts.extrabold, fontSize: 22, color: colors.white }}>{initials}</T>
+          <T style={{ fontFamily: fonts.extrabold, fontSize: 18, color: colors.white }}>{initials}</T>
         </View>
         <View style={{ flex: 1, gap: 4 }}>
           <T v="h2" color={colors.oatMilk} numberOfLines={1}>
@@ -91,9 +92,9 @@ export default function Profile() {
 
       <Card padded={false} style={{ paddingVertical: 4 }}>
         <Row icon="edit" title="Имя и почта" subtitle={user.email || 'Почта не указана'} onPress={() => router.push('/profile-edit')} />
-        <Divider inset={68} />
+        <Divider inset={64} />
         <Row icon="phone" title="Сменить телефон" subtitle={user.phone ? formatPhone(user.phone) : 'Телефон не привязан'} onPress={() => router.push('/change-phone')} />
-        <Divider inset={68} />
+        <Divider inset={64} />
         <Row
           icon="lock"
           title="Сменить пароль"
@@ -102,15 +103,15 @@ export default function Profile() {
         />
         {isBuyer && (
           <>
-            <Divider inset={68} />
+            <Divider inset={64} />
             <Row icon="pin" title="Адреса доставки" onPress={() => router.push('/addresses')} />
-            <Divider inset={68} />
+            <Divider inset={64} />
             <FavoritesRow />
           </>
         )}
-        <Divider inset={68} />
+        <Divider inset={64} />
         <Row icon="bell" title="Уведомления" onPress={() => router.push('/notifications')} />
-        <Divider inset={68} />
+        <Divider inset={64} />
         <Row icon="at" title="Контакты BULO" subtitle="Телефон, адрес, соцсети" onPress={() => router.push('/contacts')} />
       </Card>
 
@@ -159,39 +160,27 @@ function Footer() {
   );
 }
 
-/** Экран для гостя без входа: приветствие и варианты входа. */
+/** Экран для гостя без входа: одна кнопка входа, остальное — строками. */
 function Welcome() {
   return (
-    <Screen withTabBar topInset contentStyle={{ gap: space.xl }}>
+    <Screen withTabBar topInset contentStyle={{ gap: space.lg }}>
       <View style={styles.welcome}>
-        <Svg style={StyleSheet.absoluteFill} viewBox="0 0 340 360" preserveAspectRatio="xMidYMid slice">
-          <Circle cx={300} cy={40} r={90} fill={colors.softYellow} />
-          <Circle cx={40} cy={330} r={80} fill={colors.iceCube} opacity={0.8} />
-          <Circle cx={290} cy={300} r={18} fill={colors.strawberryMilk} />
-          <Path d="M60 90c10-14 30-14 40 0" stroke={colors.mango} strokeWidth={4} strokeLinecap="round" fill="none" opacity={0.5} />
+        <Svg style={StyleSheet.absoluteFill} viewBox="0 0 340 240" preserveAspectRatio="xMidYMid slice">
+          <Circle cx={310} cy={20} r={70} fill={colors.softYellow} />
+          <Circle cx={20} cy={230} r={56} fill={colors.iceCube} opacity={0.8} />
         </Svg>
-        <Logo width={150} />
-        <T v="h1" center style={{ marginTop: space.lg }}>
-          Добро пожаловать в BULO
+        <Logo width={104} />
+        <T v="h2" center style={{ marginTop: space.xs }}>
+          Добро пожаловать
         </T>
-        <T v="body" center color={colors.textMuted} style={{ maxWidth: 280 }}>
-          Синнабоны, выпечка, торты и сэндвичи для вашей кофейни — с доставкой к утру.
+        <T v="small" center color={colors.textMuted} style={{ maxWidth: 260 }}>
+          Выпечка для вашей кофейни с доставкой к утру
         </T>
+        <Button title="Войти" onPress={() => router.push('/login')} style={{ alignSelf: 'stretch', marginTop: space.md }} />
       </View>
-      <View style={{ gap: space.sm }}>
-        <Button title="Войти по номеру телефона" icon="phone" onPress={() => router.push('/login')} />
-        <Button title="Войти по логину и паролю" icon="key" kind="ghost" onPress={() => router.push('/login/password')} />
-      </View>
-      <Card style={{ gap: space.sm, backgroundColor: colors.cambodia }}>
-        <T v="h3" color={colors.oatMilk}>
-          Хотите продавать BULO?
-        </T>
-        <T v="small" color="rgba(249,245,230,0.8)">
-          Оставьте заявку — после проверки откроем оптовые цены и заказы прямо в приложении.
-        </T>
-        <Button title="Стать партнёром" kind="primary" small icon="arrowRight" onPress={() => router.push('/register')} style={{ alignSelf: 'flex-start', marginTop: 4 }} />
-      </Card>
       <Card padded={false} style={{ paddingVertical: 4 }}>
+        <Row icon="shop" title="Стать партнёром" subtitle="Оптовые цены и заказы в приложении" onPress={() => router.push('/register')} />
+        <Divider inset={64} />
         <Row icon="at" title="Контакты BULO" subtitle="Телефон, адрес, соцсети" onPress={() => router.push('/contacts')} />
       </Card>
       <Footer />
@@ -205,15 +194,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.lg,
     backgroundColor: colors.cambodia,
-    borderRadius: radius.xxl,
-    padding: space.xl,
+    borderRadius: radius.xl,
+    padding: space.lg,
     overflow: 'hidden',
     ...shadows.card,
   },
   avatar: {
-    width: 68,
-    height: 68,
-    borderRadius: 26,
+    width: 52,
+    height: 52,
+    borderRadius: 20,
     backgroundColor: colors.mango,
     alignItems: 'center',
     justifyContent: 'center',
@@ -230,11 +219,10 @@ const styles = StyleSheet.create({
   hint: { flexDirection: 'row', gap: space.sm, alignItems: 'center', backgroundColor: colors.iceCube, padding: space.md, borderRadius: radius.lg },
   welcome: {
     alignItems: 'center',
-    paddingVertical: space.xxxl,
-    paddingHorizontal: space.xl,
-    borderRadius: radius.xxl,
+    padding: space.xl,
+    borderRadius: radius.xl,
     backgroundColor: colors.white,
     overflow: 'hidden',
-    gap: space.sm,
+    gap: space.xs,
   },
 });

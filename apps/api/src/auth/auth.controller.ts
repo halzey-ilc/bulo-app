@@ -109,12 +109,21 @@ export class AddressesController {
     return p ? { ...dto, ...p } : dto;
   }
 
+  /** Адреса, сначала те, куда возили последними (как «последние поездки» в такси). */
   @Get()
-  list(@CurrentUser() user: AuthUser) {
-    return this.prisma.address.findMany({
-      where: { partnerId: this.partnerId(user) },
-      orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
-    });
+  async list(@CurrentUser() user: AuthUser) {
+    const partnerId = this.partnerId(user);
+    const [list, used] = await Promise.all([
+      this.prisma.address.findMany({ where: { partnerId }, orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }] }),
+      this.prisma.order.groupBy({ by: ['deliveryAddress'], where: { partnerId }, _max: { createdAt: true }, _count: true }),
+    ]);
+    const byText = new Map(used.map((u) => [u.deliveryAddress, u]));
+    return list
+      .map((a) => {
+        const u = byText.get(a.address);
+        return { ...a, lastUsedAt: u?._max.createdAt ?? null, ordersCount: u?._count ?? 0 };
+      })
+      .sort((a, b) => (b.lastUsedAt?.getTime() ?? 0) - (a.lastUsedAt?.getTime() ?? 0) || b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   @Post()

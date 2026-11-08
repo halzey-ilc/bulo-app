@@ -100,7 +100,7 @@ export const MAP_HTML = `<!doctype html>
   // Тайлы OpenStreetMap. Для продакшена с большим трафиком — свой тайл-сервер или платный провайдер
   // (условия tile.openstreetmap.org не рассчитаны на коммерческую нагрузку): поменять URL здесь.
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19, attribution: '© OpenStreetMap', crossOrigin: false, keepBuffer: 4, updateWhenZooming: false
+    maxZoom: 19, attribution: '© OpenStreetMap', crossOrigin: false, keepBuffer: 6, updateWhenZooming: false, updateWhenIdle: false
   }).addTo(map);
 
   var pad = { top: 80, bottom: 80, left: 40, right: 40 };
@@ -120,6 +120,8 @@ export const MAP_HTML = `<!doctype html>
 
   map.on('movestart', function () { if (picker) __send({ type: 'moveStart' }); });
   map.on('moveend', function () {
+    // в навигации камера двигается каждый кадр — не засыпаем приложение сообщениями
+    if (!picker) return;
     var c = map.getCenter();
     __send({ type: 'moveEnd', lat: c.lat, lng: c.lng, zoom: map.getZoom() });
   });
@@ -165,9 +167,17 @@ export const MAP_HTML = `<!doctype html>
     else { opts.duration = 0.9; opts.easeLinearity = 0.2; map.flyToBounds(b, opts); }
   }
 
-  /** Центр с поправкой на шторку: точка оказывается посередине видимой части. */
+  /**
+   * Центр с поправкой на шторку: точка оказывается посередине видимой части.
+   * В режиме навигации курьер стоит ниже центра — впереди видно больше дороги (как в навигаторах).
+   */
   function centered(ll, z) {
     var p = map.project(ll, z).add([(pad.right - pad.left) / 2, (pad.bottom - pad.top) / 2]);
+    if (follow && courier) {
+      var size = map.getSize(), visH = Math.max(120, size.y - pad.top - pad.bottom);
+      var L = visH * 0.26, a = courierAngle * Math.PI / 180;
+      p = p.add([Math.sin(a) * L, -Math.cos(a) * L]);
+    }
     return map.unproject(p, z);
   }
   function centerOn(ll, zoom, animate) {
@@ -390,14 +400,19 @@ export const MAP_HTML = `<!doctype html>
       else if (c.heading != null && !isNaN(c.heading)) targetAngle = c.heading;
       turn();
       if ((frame++ & 1) === 0) trim();
-      if (follow && !userMoved) map.setView(centered(ll, map.getZoom()), map.getZoom(), { animate: false });
+      if (follow && !userMoved) map.setView(centered(ll, map.getZoom()), map.getZoom(), { animate: false, noMoveStart: true });
       if (k < 1) anim = requestAnimationFrame(step);
       else { courierPos = to; trim(); anim = requestAnimationFrame(settle); }
     }
     anim = requestAnimationFrame(step);
   }
-  // после остановки доворачиваем стрелку до конца
-  function settle() { if (turn()) anim = requestAnimationFrame(settle); }
+  // после остановки доворачиваем стрелку до конца (камера в навигации доворачивается вместе с ней)
+  function settle() {
+    if (turn()) {
+      if (follow && !userMoved && courierPos) map.setView(centered(courierPos, map.getZoom()), map.getZoom(), { animate: false, noMoveStart: true });
+      anim = requestAnimationFrame(settle);
+    }
+  }
 
   function handle(m) {
     if (!m || typeof m !== 'object') return;
@@ -407,7 +422,7 @@ export const MAP_HTML = `<!doctype html>
       case 'fit': userMoved = false; follow = false; fit(true); break;
       case 'follow':
         follow = !!m.on; userMoved = false;
-        if (follow && courier) centerOn(courier.getLatLng(), Math.max(map.getZoom(), 16.5), true);
+        if (follow && courier) centerOn(courier.getLatLng(), 17.25, true);
         else if (!follow) fit(true);
         break;
       case 'view':

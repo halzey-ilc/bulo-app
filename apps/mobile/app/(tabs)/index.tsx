@@ -1,11 +1,12 @@
 import React, { memo, useMemo } from 'react';
-import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import Svg, { Circle, Path } from 'react-native-svg';
 import type { Order, Product } from '../../src/api';
 import { NoOrderNote, PartnerStatusCard, SignInCta } from '../../src/components/gates';
 import { Icon, IconName } from '../../src/components/Icon';
 import { Screen } from '../../src/components/layout';
+import { buildStories, StoriesRow } from '../../src/components/Stories';
 import { Logo } from '../../src/components/Logo';
 import { FadeIn, Pulse } from '../../src/components/motion';
 import { FlowDots, StatusChip } from '../../src/components/order';
@@ -56,29 +57,16 @@ export default function Home() {
   const lastOrder = orders.data?.[0];
   const activeOrder = orders.data?.find((o) => ACTIVE.has(o.status));
   const news = useMemo(() => (products.data ?? []).filter((p) => p.isNew), [products.data]);
+  const showcase = useMemo(() => (products.data ?? []).filter((p) => !!p.photoUrl).slice(0, 10), [products.data]);
   const favorites = useMemo(() => {
     const byId = new Map((products.data ?? []).map((p) => [p.id, p]));
     return favIds.map((id) => byId.get(id)).filter((p): p is Product => !!p);
   }, [favIds, products.data]);
   const frequent = useMemo(() => frequentProducts(orders.data, products.data), [orders.data, products.data]);
-  const cinnabon = cats.data?.find((c) => c.name.toLowerCase().includes('синнаб'));
-
-  const stories: { key: string; label: string; icon: IconName; bg: string; fg: string; onPress: () => void }[] = [
-    { key: 'new', label: 'Новинки', icon: 'sparkle', bg: '#EEF0B8', fg: colors.cambodia, onPress: () => router.navigate({ pathname: '/catalog', params: { isNew: '1' } }) },
-    {
-      key: 'cin',
-      label: 'Синнабоны',
-      icon: 'spiral',
-      bg: colors.softYellow,
-      fg: colors.mango,
-      onPress: () => router.navigate({ pathname: '/catalog', params: cinnabon ? { categoryId: cinnabon.id } : {} }),
-    },
-    { key: 'fav', label: 'Избранное', icon: 'heart', bg: '#FBD9E8', fg: colors.coffee, onPress: () => router.navigate({ pathname: '/catalog', params: { fav: '1' } }) },
-    canOrder && lastOrder
-      ? { key: 'rep', label: 'Повторить', icon: 'repeat', bg: colors.primarySoft, fg: colors.mango, onPress: () => repeatOrder(lastOrder) }
-      : { key: 'addr', label: authed ? 'Адреса' : 'Где мы', icon: 'pin', bg: colors.iceCube, fg: colors.blueberry, onPress: () => router.push(authed && buyer ? '/addresses' : '/contacts') },
-    { key: 'cont', label: 'Контакты', icon: 'phone', bg: colors.greenSoft, fg: colors.cambodia, onPress: () => router.push('/contacts') },
-  ];
+  const stories = useMemo(
+    () => buildStories({ products: products.data, categories: cats.data, canOrder, cutoffTime: rules.data?.cutoffTime }),
+    [products.data, cats.data, canOrder, rules.data?.cutoffTime],
+  );
 
   return (
     <Screen withTabBar topInset refreshing={refreshing} onRefresh={onRefresh} contentStyle={{ gap: space.lg }}>
@@ -100,7 +88,7 @@ export default function Home() {
         </View>
       </View>
 
-      <Stories items={stories} />
+      <StoriesRow groups={stories} />
 
       {user && <PartnerStatusCard user={user} />}
       {user && user.role === 'GUEST' && !canOrder && <NoOrderNote />}
@@ -131,15 +119,19 @@ export default function Home() {
         />
       )}
 
-      <ProductRow
-        title="Новинки"
-        icon="sparkle"
-        products={news}
-        canOrder={canOrder}
-        loading={products.loading}
-        empty="Скоро здесь появятся новинки"
-        onAll={() => router.navigate({ pathname: '/catalog', params: { isNew: '1' } })}
-      />
+      {/* Новинки, а пока их нет — то, что есть с фото: без пустых блоков-заглушек */}
+      {news.length > 0 || products.loading ? (
+        <ProductRow
+          title="Новинки"
+          icon="sparkle"
+          products={news}
+          canOrder={canOrder}
+          loading={products.loading}
+          onAll={() => router.navigate({ pathname: '/catalog', params: { isNew: '1' } })}
+        />
+      ) : (
+        showcase.length > 0 && <ProductRow title="Попробуйте" icon="flame" products={showcase} canOrder={canOrder} onAll={() => router.navigate('/catalog')} />
+      )}
 
       {/* Категории */}
       {!!cats.data?.length && (
@@ -169,29 +161,6 @@ export default function Home() {
       )}
 
     </Screen>
-  );
-}
-
-/** Ряд «сторис»: ровно 5 кружков на ширину экрана — без обрезанного края. */
-function Stories({ items }: { items: { key: string; label: string; icon: IconName; bg: string; fg: string; onPress: () => void }[] }) {
-  const { width } = useWindowDimensions();
-  const gap = 8;
-  const size = Math.min(58, Math.floor((width - space.lg * 2 - gap * (items.length - 1)) / items.length));
-  return (
-    <View style={[styles.stories, { gap }]}>
-      {items.map((s) => (
-        <Touchable key={s.key} onPress={s.onPress} style={[styles.story, { width: size }]} haptic scaleTo={0.93} accessibilityLabel={s.label}>
-          <View style={[styles.storyRing, { width: size, height: size, borderRadius: size / 2 }]}>
-            <View style={[styles.storyInner, { backgroundColor: s.bg }]}>
-              <Icon name={s.icon} size={Math.round(size * 0.4)} color={s.fg} strokeWidth={1.7} />
-            </View>
-          </View>
-          <T v="small" style={{ fontFamily: fonts.semibold, fontSize: 11, letterSpacing: -0.2 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-            {s.label}
-          </T>
-        </Touchable>
-      ))}
-    </View>
   );
 }
 
@@ -376,15 +345,6 @@ const styles = StyleSheet.create({
     borderColor: colors.white,
     ...shadows.soft,
   },
-  stories: { flexDirection: 'row', justifyContent: 'space-between' },
-  story: { alignItems: 'center', gap: 6 },
-  storyRing: {
-    borderWidth: 2.5,
-    borderColor: colors.mango,
-    padding: 3,
-    backgroundColor: colors.white,
-  },
-  storyInner: { flex: 1, borderRadius: 40, alignItems: 'center', justifyContent: 'center' },
   liveIcon: {
     width: 40,
     height: 40,

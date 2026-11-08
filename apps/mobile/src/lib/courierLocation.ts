@@ -116,7 +116,8 @@ export function useCourierTracking(active: boolean) {
         const last = await Location.getLastKnownPositionAsync();
         if (last && !cancelled) onFix(last);
         sub = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.High, timeInterval: 4000, distanceInterval: Platform.OS === 'android' ? 0 : 5 },
+          // раз в секунду — стрелка на карте едет плавно; на сервер всё равно уходит раз в 10 секунд
+          { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: Platform.OS === 'android' ? 0 : 2 },
           onFix,
         );
         if (cancelled) sub.remove();
@@ -144,5 +145,11 @@ export function useCourierTracking(active: boolean) {
     return p;
   }, []);
 
-  return { permission, fix, retry };
+  /** Отправить последнюю точку сейчас (например, курьер свернул с маршрута — его надо перестроить). */
+  const flush = useCallback(async () => {
+    sentAt.current = 0;
+    await send();
+  }, [send]);
+
+  return { permission, fix, retry, flush };
 }

@@ -2,6 +2,7 @@ import { api } from './client';
 import type {
   Address,
   CourierRoute,
+  GeoHit,
   Tracking,
   AuthResponse,
   Category,
@@ -20,7 +21,7 @@ import type { OrderStatus } from '../shared';
 export * from './client';
 export * from './types';
 
-const qs = (o: Record<string, string | undefined | null | false>) => {
+const qs = (o: Record<string, string | number | undefined | null | false>) => {
   const p = Object.entries(o)
     .filter(([, v]) => v !== undefined && v !== null && v !== '' && v !== false)
     .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
@@ -94,6 +95,12 @@ export const Addresses = {
   update: (id: string, dto: AddressDto) =>
     api.patch<Address>(`/me/addresses/${id}`, dto),
   remove: (id: string) => api.del(`/me/addresses/${id}`),
+};
+
+export const Geo = {
+  suggest: (q: string, near?: { lat: number; lng: number } | null) =>
+    api.get<GeoHit[]>(`/geo/suggest${qs({ q, lat: near?.lat, lng: near?.lng })}`),
+  reverse: (p: { lat: number; lng: number }) => api.get<GeoHit | null>(`/geo/reverse${qs({ lat: p.lat, lng: p.lng })}`),
 };
 
 export const Notifications = {

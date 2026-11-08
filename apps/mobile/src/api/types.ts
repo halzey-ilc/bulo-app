@@ -138,6 +138,31 @@ export interface Address {
   lng?: number | null;
   /** Подъезд, этаж, ориентир */
   entrance?: string | null;
+  /** Когда сюда последний раз заказывали — для «последних адресов» */
+  lastUsedAt?: string | null;
+  ordersCount?: number;
+}
+
+/** Вариант адреса из поиска. */
+export interface GeoHit {
+  title: string;
+  subtitle: string;
+  lat: number;
+  lng: number;
+  /** true — нашли сам дом, false — только улицу или район */
+  exact: boolean;
+}
+
+/** Подсказка навигатора. */
+export interface Maneuver {
+  lat: number;
+  lng: number;
+  /** индекс точки на линии маршрута */
+  at: number;
+  kind: string;
+  text: string;
+  street: string | null;
+  stop?: number;
 }
 
 /* ───────── Доставка ───────── */
@@ -177,7 +202,7 @@ export interface CourierRoute {
   bakery: GeoPoint;
   position: CourierPosition | null;
   onShift: boolean;
-  route: { geometry: [number, number][]; byRoads: boolean; totalKm: number; totalMinutes: number };
+  route: { geometry: [number, number][]; byRoads: boolean; totalKm: number; totalMinutes: number; maneuvers?: Maneuver[] };
   stops: CourierStop[];
   toPickup: CourierStop[];
 }

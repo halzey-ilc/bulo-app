@@ -1,8 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import { Addresses, errorMessage, Orders } from '../src/api';
+import { AddressPicker, PickedAddress } from '../src/components/delivery/MapPicker';
 import { Icon } from '../src/components/Icon';
+import { FadeIn } from '../src/components/motion';
 import { BottomBar, Header, Screen } from '../src/components/layout';
 import { ProductImage } from '../src/components/product';
 import { Button, Card, Divider, EmptyState, ErrorState, Field, hapticSuccess, Skeleton, T, Touchable } from '../src/components/ui';
@@ -13,7 +15,7 @@ import { goTab } from '../src/lib/nav';
 import { invalidateOrders, Q, useQuery } from '../src/lib/queries';
 import { useAuth } from '../src/store/auth';
 import { cartTotal, useCart } from '../src/store/cart';
-import { confirmDialog, toast } from '../src/store/ui';
+import { toast } from '../src/store/ui';
 import { colors, fonts, radius, space } from '../src/theme';
 
 export default function Checkout() {
@@ -36,34 +38,47 @@ export default function Checkout() {
   const date = days.length ? (cartDate && days.includes(cartDate) ? cartDate : days[0]) : null;
   const setDate = (d: string) => useCart.getState().setDeliveryDate(d);
 
-  useEffect(() => {
-    const list = addresses.data;
-    if (list?.length && (!addressId || !list.some((a) => a.id === addressId))) {
-      setAddressId((list.find((a) => a.isDefault) ?? list[0]).id);
-    }
-  }, [addresses.data, addressId]);
+  // Адрес заранее не подставляем — выбирают сами: последние адреса под рукой, одно касание.
+  const info = useQuery(Q.info(), { staleTime: 5 * 60_000 });
+  const bakery = info.data?.bakeryLat != null && info.data?.bakeryLng != null ? { lat: info.data.bakeryLat, lng: info.data.bakeryLng } : null;
+  const [picking, setPicking] = useState(false);
+  const recents = addresses.data ?? [];
+  const chosen = recents.find((a) => a.id === addressId) ?? null;
 
   const total = cartTotal(lines);
   const minSum = rules.data?.minOrderSum ?? 0;
 
-  const addAddress = () =>
-    confirmDialog({
-      title: 'Новый адрес',
-      message: 'Улица, дом, ориентир — чтобы курьер нашёл вас быстрее.',
-      input: { placeholder: 'г. Бишкек, ул. Киевская, 95', required: true },
-      confirmText: 'Сохранить',
-      onConfirm: async (address) => {
-        const a = await Addresses.create({ address, isDefault: !addresses.data?.length });
-        addresses.setData([...(addresses.data ?? []), a]);
-        setAddressId(a.id);
-        toast.success('Адрес добавлен');
-      },
-    });
+  const onPicked = async (p: PickedAddress) => {
+    try {
+      if (p.id) {
+        setAddressId(p.id);
+      } else {
+        // такой адрес уже есть — не плодим копии
+        const same = recents.find((a) => a.address.trim().toLowerCase() === p.address.trim().toLowerCase());
+        if (same) {
+          const upd = await Addresses.update(same.id, { address: same.address, lat: p.lat, lng: p.lng, entrance: p.entrance || same.entrance || null });
+          addresses.setData(recents.map((a) => (a.id === same.id ? { ...a, ...upd } : a)));
+          setAddressId(same.id);
+        } else {
+          const a = await Addresses.create({ address: p.address, lat: p.lat, lng: p.lng, entrance: p.entrance || null });
+          addresses.setData([a, ...recents]);
+          setAddressId(a.id);
+        }
+      }
+      setError(null);
+      setPicking(false);
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
 
   const submit = async () => {
     setError(null);
     if (!date) return setError('Выберите дату доставки');
-    if (!addressId) return setError('Добавьте адрес доставки');
+    if (!addressId) {
+      setPicking(true);
+      return setError('Укажите, куда доставить');
+    }
     setSubmitting(true);
     try {
       const order = await Orders.create({
@@ -164,31 +179,52 @@ export default function Checkout() {
           </View>
           {addresses.loading ? (
             <Skeleton style={{ height: 64 }} />
-          ) : (
-            <View style={{ gap: space.sm }}>
-              {(addresses.data ?? []).map((a) => {
-                const active = a.id === addressId;
-                return (
-                  <Touchable key={a.id} haptic onPress={() => setAddressId(a.id)} style={[styles.addr, active && styles.addrActive]} scaleTo={0.98}>
-                    <View style={[styles.radio, active && styles.radioActive]}>{active && <View style={styles.radioDot} />}</View>
-                    <View style={{ flex: 1 }}>
-                      {!!a.label && (
-                        <T v="caption" color={colors.mango} style={{ fontFamily: fonts.bold }}>
-                          {a.label.toUpperCase()}
-                        </T>
-                      )}
-                      <T v="bodyStrong">{a.address}</T>
-                    </View>
-                    <Icon name="pin" size={20} color={active ? colors.mango : colors.textSoft} />
-                  </Touchable>
-                );
-              })}
-              <Touchable onPress={addAddress} style={styles.addAddr} haptic>
-                <Icon name="plus" size={18} color={colors.mango} strokeWidth={2} />
-                <T v="bodyStrong" color={colors.mango}>
-                  {addresses.data?.length ? 'Другой адрес' : 'Добавить адрес доставки'}
+          ) : chosen ? (
+            <FadeIn key={chosen.id} offset={8}>
+              <Touchable haptic onPress={() => setPicking(true)} style={[styles.addr, styles.addrActive]} scaleTo={0.98}>
+                <View style={styles.addrIcon}>
+                  <Icon name="pin" size={20} color={colors.white} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <T v="bodyStrong">{chosen.address}</T>
+                  {!!chosen.entrance && (
+                    <T v="small" color={colors.textMuted}>
+                      {chosen.entrance}
+                    </T>
+                  )}
+                </View>
+                <T v="small" color={colors.mango} style={{ fontFamily: fonts.bold }}>
+                  Изменить
                 </T>
               </Touchable>
+            </FadeIn>
+          ) : (
+            <View style={{ gap: space.sm }}>
+              <Touchable haptic onPress={() => setPicking(true)} style={styles.where} scaleTo={0.98}>
+                <Icon name="search" size={20} color={colors.textSoft} />
+                <T v="body" color={colors.textSoft} style={{ flex: 1 }}>
+                  Улица и номер дома
+                </T>
+              </Touchable>
+              {recents.slice(0, 3).map((a, i) => (
+                <FadeIn key={a.id} delay={i * 50} offset={6}>
+                  <Touchable haptic onPress={() => (a.lat == null ? setPicking(true) : setAddressId(a.id))} style={styles.recent} scaleTo={0.98}>
+                    <View style={styles.recentIcon}>
+                      <Icon name="clock" size={16} color={colors.textMuted} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <T v="bodyStrong" numberOfLines={1}>
+                        {a.address}
+                      </T>
+                      {!!a.entrance && (
+                        <T v="small" color={colors.textMuted} numberOfLines={1}>
+                          {a.entrance}
+                        </T>
+                      )}
+                    </View>
+                  </Touchable>
+                </FadeIn>
+              ))}
             </View>
           )}
         </View>
@@ -243,7 +279,7 @@ export default function Checkout() {
         <View style={[styles.hint, { backgroundColor: colors.iceCube }]}>
           <Icon name="card" size={18} color={colors.blueberry} />
           <T v="small" color={colors.blueberry} style={{ flex: 1, fontFamily: fonts.semibold }}>
-            Оплата — после одобрения заказа менеджером. Способ оплаты уточняется, менеджер свяжется с вами.
+            Заказ сразу уйдёт в цех. Как оплатить — подскажет менеджер, оплатить можно и после доставки.
           </T>
         </View>
       </Screen>
@@ -260,7 +296,7 @@ export default function Checkout() {
         <Button
           title="Оформить заказ"
           loading={submitting}
-          disabled={!date || !addressId}
+          disabled={!date}
           onPress={submit}
           right={
             <T v="small" color="rgba(255,255,255,0.85)" style={{ fontFamily: fonts.bold }}>
@@ -269,6 +305,8 @@ export default function Checkout() {
           }
         />
       </BottomBar>
+
+      <AddressPicker visible={picking} recents={recents} near={bakery} onClose={() => setPicking(false)} onDone={onPicked} />
     </View>
   );
 }
@@ -312,6 +350,20 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   addrActive: { borderColor: colors.mango, backgroundColor: '#FFF8F4' },
+  addrIcon: { width: 40, height: 40, borderRadius: 14, backgroundColor: colors.mango, alignItems: 'center', justifyContent: 'center' },
+  where: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    height: 56,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  recent: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 6, paddingHorizontal: 4 },
+  recentIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.oatMilk, alignItems: 'center', justifyContent: 'center' },
   radio: {
     width: 22,
     height: 22,

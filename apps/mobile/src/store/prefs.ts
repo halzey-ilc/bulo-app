@@ -12,6 +12,9 @@ interface PrefsState {
   lastLogin: string;
   loginTab: 'phone' | 'password';
   onboardingSeen: boolean;
+  /** Просмотренные истории: ключ группы → «подпись» содержимого (новые слайды снова подсвечивают кружок) */
+  seenStories: Record<string, string>;
+  markStorySeen: (key: string, sig: string) => void;
   toggleFavorite: (productId: string) => boolean;
   pushSearch: (q: string) => void;
   removeSearch: (q: string) => void;
@@ -29,6 +32,8 @@ export const usePrefs = create<PrefsState>()(
       lastLogin: '',
       loginTab: 'phone',
       onboardingSeen: false,
+      seenStories: {},
+      markStorySeen: (key, sig) => set({ seenStories: { ...get().seenStories, [key]: sig } }),
       toggleFavorite: (id) => {
         const has = get().favorites.includes(id);
         set({ favorites: has ? get().favorites.filter((f) => f !== id) : [id, ...get().favorites] });

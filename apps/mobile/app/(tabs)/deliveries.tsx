@@ -6,6 +6,8 @@ import { Courier, CourierRoute, CourierStop, errorMessage, Orders } from '../../
 import { Pill, PulseDot, Toggle } from '../../src/components/admin/kit';
 import { callPhone } from '../../src/components/contacts';
 import { HandoverSheet } from '../../src/components/delivery/HandoverSheet';
+import { NavBanner } from '../../src/components/delivery/NavBanner';
+import { navState } from '../../src/lib/navigation';
 import { NavigatorSheet } from '../../src/components/delivery/NavigatorSheet';
 import { Icon, IconName } from '../../src/components/Icon';
 import { BrandRefresh } from '../../src/components/layout';
@@ -15,7 +17,7 @@ import { FadeIn } from '../../src/components/motion';
 import { Button, Card, EmptyState, ErrorState, hapticImpact, hapticSuccess, Skeleton, T, Touchable } from '../../src/components/ui';
 import { useCourierTracking } from '../../src/lib/courierLocation';
 import { addressCount, clock, kmText, minText, minutesUntil } from '../../src/lib/delivery';
-import { dayLabel, formatPhone, money, plural } from '../../src/lib/format';
+import { dayLabel, money, plural } from '../../src/lib/format';
 import { invalidateOrders } from '../../src/lib/queries';
 import { useLoad } from '../../src/lib/useLoad';
 import { toast } from '../../src/store/ui';
@@ -41,7 +43,6 @@ export default function Deliveries() {
   const [following, setFollowing] = useState(false);
   const [moved, setMoved] = useState(false);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [shiftBusy, setShiftBusy] = useState(false);
 
   const stops = data?.stops ?? [];
@@ -84,7 +85,6 @@ export default function Deliveries() {
     });
     const results = await Promise.allSettled(ids.map((id) => Orders.setStatus(id, 'SHIPPED')));
     ids.forEach((id) => setBusyFor(id, false));
-    setSelected(new Set());
     const failed = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
     if (failed.length) toast.error(errorMessage(failed[0].reason));
     const ok = ids.length - failed.length;
@@ -135,6 +135,33 @@ export default function Deliveries() {
   const geoProblem = onShift && (live.permission === 'denied' || live.permission === 'blocked' || live.permission === 'off');
   const fixGeo = () => (live.permission === 'blocked' ? Linking.openSettings() : live.retry());
   const courierPos = live.fix ?? (onShift ? data?.position : null) ?? null;
+
+  // Стрелка «доезжает» до новой точки ровно за интервал между точками GPS — без рывков и остановок.
+  const prevFixAt = useRef<number | null>(null);
+  const animMs = useMemo(() => {
+    const at = live.fix?.at;
+    if (at == null) return 1000;
+    const gap = prevFixAt.current != null ? at - prevFixAt.current : 1000;
+    prevFixAt.current = at;
+    return Math.max(500, Math.min(gap, 5000));
+  }, [live.fix?.at]);
+
+  /* ───── Навигация: следующий поворот ───── */
+  const hint = useRef(0);
+  const turn = useMemo(() => {
+    const s = navState(data?.route.geometry, data?.route.maneuvers, onShift && stops.length && data?.route.byRoads ? live.fix : null, hint.current);
+    hint.current = s.index;
+    return s;
+  }, [data?.route.geometry, data?.route.maneuvers, data?.route.byRoads, live.fix, onShift, stops.length]);
+
+  // Свернул с маршрута — отправляем точку сразу и просим новый маршрут (не чаще раза в 12 секунд).
+  const reroutedAt = useRef(0);
+  useEffect(() => {
+    if (!turn.offRoute || Date.now() - reroutedAt.current < 12_000) return;
+    reroutedAt.current = Date.now();
+    void live.flush().then(() => q.reload());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [turn.offRoute]);
   const padding = useMemo(() => ({ top: insets.top + 96, bottom: sheetH + tabH + 64, left: 36, right: 36 }), [insets.top, sheetH, tabH]);
 
   const onMarkerPress = useCallback(
@@ -155,11 +182,14 @@ export default function Deliveries() {
     setFollowing(false);
     map.current?.fit();
   };
+  /** «Поехали»: камера за курьером, шторка свёрнута, сверху подсказки поворотов. */
   const toggleFollow = () => {
     const on = !following;
     setFollowing(on);
     setMoved(false);
     map.current?.follow(on);
+    sheet.current?.snapTo(on ? 0 : 1);
+    if (on) hapticImpact();
   };
 
   // После смены высоты шторки — вписать маршрут заново (если карту не трогали).
@@ -212,7 +242,7 @@ export default function Deliveries() {
         route={data?.route.geometry}
         byRoads={data?.route.byRoads}
         courier={courierPos}
-        courierAnimMs={1000}
+        courierAnimMs={animMs}
         padding={padding}
         onMarkerPress={onMarkerPress}
         onUserMove={() => {
@@ -222,8 +252,11 @@ export default function Deliveries() {
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Плавающая шапка: смена + сводка */}
+      {/* Плавающая шапка: в пути — подсказка поворота, иначе смена + сводка */}
       <View style={[styles.top, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
+        {following && (turn.next || turn.offRoute) ? (
+          <NavBanner next={turn.next} offRoute={turn.offRoute} />
+        ) : (
         <View style={{ flexDirection: 'row', gap: space.sm, alignItems: 'flex-start' }} pointerEvents="box-none">
           <View style={[styles.shift, onShift && styles.shiftOn]}>
             {onShift ? <PulseDot color={colors.lime} size={8} /> : <View style={styles.offDot} />}
@@ -238,6 +271,7 @@ export default function Deliveries() {
             {shiftBusy ? <ActivityIndicator color={onShift ? colors.oatMilk : colors.mango} /> : <Toggle value={onShift} onChange={toggleShift} disabled={!data} />}
           </View>
         </View>
+        )}
         {geoProblem && (
           <Touchable haptic onPress={fixGeo} style={styles.geoPill}>
             <Icon name="info" size={14} color={colors.coffee} />
@@ -267,10 +301,16 @@ export default function Deliveries() {
             ) : (
               <View />
             )}
-            <View style={{ flexDirection: 'row', gap: space.sm }}>
-              <MapButton icon="pin" active={false} onPress={recenter} label="Весь маршрут" highlight={moved} />
-              <MapButton icon="navigation" active={following} onPress={toggleFollow} label="Следовать за мной" />
-            </View>
+            {/* Одна кнопка вместо двух: «Поехали» → «Обзор»; если карту сдвинули — «Вернуть» */}
+            {following ? (
+              <MapPill icon="pin" label="Обзор" onPress={toggleFollow} />
+            ) : onShift && focus && courierPos ? (
+              <MapPill icon="navigation" label="Поехали" primary onPress={toggleFollow} />
+            ) : moved ? (
+              <MapPill icon="pin" label="Весь маршрут" onPress={recenter} />
+            ) : (
+              <View />
+            )}
           </View>
         }
         refreshControl={<BrandRefresh refreshing={q.refreshing} onRefresh={q.refresh} />}
@@ -284,20 +324,6 @@ export default function Deliveries() {
           <ErrorState message={q.error} onRetry={q.refresh} />
         ) : (
           <>
-            {geoProblem && (
-              <Touchable haptic onPress={fixGeo} style={styles.geoWarn}>
-                <Icon name="info" size={18} color={colors.coffee} />
-                <View style={{ flex: 1 }}>
-                  <T v="small" color={colors.coffee} style={{ fontFamily: fonts.extrabold }}>
-                    {live.permission === 'off' ? 'Геолокация в телефоне выключена' : 'Нет доступа к геопозиции'}
-                  </T>
-                  <T v="small" color={colors.coffee}>
-                    Получатели не видят, где заказ, а время считается от пекарни.{' '}
-                    {live.permission === 'blocked' ? 'Разрешите доступ в настройках →' : live.permission === 'off' ? 'Включите её и нажмите сюда →' : 'Нажмите, чтобы разрешить →'}
-                  </T>
-                </View>
-              </Touchable>
-            )}
             {focus && (
               <StopDetails
                 stop={focus}
@@ -329,20 +355,7 @@ export default function Deliveries() {
             )}
 
             {pickups.length > 0 && (
-              <PickupSection
-                items={pickups}
-                busy={busy}
-                selected={selected}
-                onToggle={(id) =>
-                  setSelected((s) => {
-                    const n = new Set(s);
-                    if (n.has(id)) n.delete(id);
-                    else n.add(id);
-                    return n;
-                  })
-                }
-                onPick={pickUp}
-              />
+              <PickupSection items={pickups} busy={busy} onPick={pickUp} />
             )}
 
             {!stops.length && !pickups.length && (
@@ -436,7 +449,7 @@ function SheetHeader({
         </View>
         <View style={{ flexDirection: 'row', gap: space.sm }}>
           {!there && <Button title="Я на месте" icon="pin" kind="dark" loading={busy} onPress={onArrived} style={{ flex: 1 }} />}
-          <Button title="Вручить" icon="key" onPress={onHandover} style={{ flex: 1 }} />
+          <Button title="Вручить" icon="check" onPress={onHandover} style={{ flex: 1 }} />
         </View>
       </View>
     );
@@ -555,13 +568,8 @@ function StopDetails({ stop, now, onCall, onNav, onOpen }: { stop: CourierStop; 
 
       <View style={{ flexDirection: 'row', gap: space.sm }}>
         <Button title="Позвонить" icon="phone" kind="secondary" onPress={onCall} disabled={!stop.partner.phone} style={{ flex: 1, paddingHorizontal: space.md }} />
-        <Button title="Навигатор" icon="navigation" kind="ghost" onPress={onNav} style={{ flex: 1, paddingHorizontal: space.md }} />
+        <Button title="В 2ГИС" icon="navigation" kind="ghost" onPress={onNav} style={{ flex: 1, paddingHorizontal: space.md }} />
       </View>
-      {!!stop.partner.phone && (
-        <T v="caption" color={colors.textSoft} center style={{ letterSpacing: 0 }}>
-          {formatPhone(stop.partner.phone)}
-        </T>
-      )}
     </Card>
   );
 }
@@ -615,54 +623,28 @@ function StopRow({ stop, index, active, now, onPress }: { stop: CourierStop; ind
 
 /* ───────── Забрать в пекарне ───────── */
 
-function PickupSection({
-  items,
-  busy,
-  selected,
-  onToggle,
-  onPick,
-}: {
-  items: CourierStop[];
-  busy: Record<string, boolean>;
-  selected: Set<string>;
-  onToggle: (id: string) => void;
-  onPick: (ids: string[]) => void;
-}) {
-  const sel = items.filter((i) => selected.has(i.orderId)).map((i) => i.orderId);
-  const anyBusy = items.some((i) => busy[i.orderId]);
+/** Заказы в пекарне. «Забрать все» — в шапке шторки, здесь — по одному. */
+function PickupSection({ items, busy, onPick }: { items: CourierStop[]; busy: Record<string, boolean>; onPick: (ids: string[]) => void }) {
   return (
     <View style={{ gap: space.sm }}>
       <SectionLabel title="Забрать в пекарне" right={`${items.length} ${plural(items.length, 'заказ', 'заказа', 'заказов')}`} />
       <Card padded={false} style={{ paddingVertical: 4 }}>
-        {items.map((o, i) => {
-          const on = selected.has(o.orderId);
-          return (
-            <View key={o.orderId} style={[styles.pickRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
-              <Touchable onPress={() => onToggle(o.orderId)} haptic hitSlop={8} style={[styles.check, on && styles.checkOn]} accessibilityRole="checkbox" accessibilityState={{ checked: on }}>
-                {on && <Icon name="check" size={16} color={colors.white} strokeWidth={3} />}
-              </Touchable>
-              <Touchable onPress={() => onToggle(o.orderId)} style={{ flex: 1 }}>
+        {items.map((o, i) => (
+          <FadeIn key={o.orderId} delay={i * 40} offset={6}>
+            <View style={[styles.pickRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }]}>
+              <View style={{ flex: 1 }}>
                 <T v="bodyStrong" numberOfLines={1}>
                   №{o.number} · {o.partner.name}
                 </T>
                 <T v="small" color={colors.textMuted} numberOfLines={1}>
                   {o.unitsCount} шт · {o.address || 'адрес не указан'}
                 </T>
-              </Touchable>
+              </View>
               <Button title="Забрать" small kind="dark" loading={!!busy[o.orderId]} onPress={() => onPick([o.orderId])} />
             </View>
-          );
-        })}
+          </FadeIn>
+        ))}
       </Card>
-      {items.length > 1 && (
-        <Button
-          title={sel.length ? `Забрать выбранные (${sel.length})` : `Забрать все (${items.length})`}
-          icon="box"
-          kind={sel.length ? 'primary' : 'secondary'}
-          loading={anyBusy}
-          onPress={() => onPick(sel.length ? sel : items.map((i) => i.orderId))}
-        />
-      )}
     </View>
   );
 }
@@ -682,11 +664,16 @@ function SectionLabel({ title, right }: { title: string; right?: string }) {
   );
 }
 
-function MapButton({ icon, active, onPress, label, highlight }: { icon: IconName; active: boolean; onPress: () => void; label: string; highlight?: boolean }) {
+function MapPill({ icon, label, onPress, primary }: { icon: IconName; label: string; onPress: () => void; primary?: boolean }) {
   return (
-    <Touchable onPress={onPress} haptic accessibilityLabel={label} style={[styles.mapBtn, active && { backgroundColor: colors.mango }, highlight && { borderColor: colors.mango }]}>
-      <Icon name={icon} size={20} color={active ? colors.white : colors.text} />
-    </Touchable>
+    <FadeIn key={label} offset={6}>
+      <Touchable onPress={onPress} haptic accessibilityLabel={label} scaleTo={0.94} style={[styles.mapPill, primary && { backgroundColor: colors.mango }]}>
+        <Icon name={icon} size={18} color={primary ? colors.white : colors.text} />
+        <T v="bodyStrong" color={primary ? colors.white : colors.text} style={{ fontFamily: fonts.extrabold }}>
+          {label}
+        </T>
+      </Touchable>
+    </FadeIn>
   );
 }
 
@@ -717,20 +704,18 @@ const styles = StyleSheet.create({
   },
   shiftOn: { backgroundColor: colors.cambodia },
   offDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(38,66,43,0.3)', marginHorizontal: 7 },
-  mapBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.white,
+  mapPill: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
+    gap: 8,
+    height: 44,
+    paddingHorizontal: 18,
+    borderRadius: 22,
+    backgroundColor: colors.white,
     ...shadows.card,
   },
   above: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   etaChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.cambodia, paddingHorizontal: 12, height: 36, borderRadius: radius.pill, ...shadows.card },
-  geoWarn: { flexDirection: 'row', gap: space.sm, alignItems: 'center', backgroundColor: colors.dangerSoft, padding: space.md, borderRadius: radius.lg },
   geoPill: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: colors.dangerSoft, paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.pill, ...shadows.soft },
   head: { paddingHorizontal: space.lg, paddingBottom: space.md, paddingTop: 2, gap: space.md },
   num: { width: 44, height: 44, borderRadius: 16, backgroundColor: colors.mango, alignItems: 'center', justifyContent: 'center' },
@@ -757,6 +742,4 @@ const styles = StyleSheet.create({
   numSmall: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.mango, alignItems: 'center', justifyContent: 'center' },
   numSmallText: { fontFamily: fonts.extrabold, fontSize: 14, lineHeight: 18, color: colors.white },
   pickRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.lg },
-  check: { width: 26, height: 26, borderRadius: 9, borderWidth: 2, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
-  checkOn: { backgroundColor: colors.mango, borderColor: colors.mango },
 });

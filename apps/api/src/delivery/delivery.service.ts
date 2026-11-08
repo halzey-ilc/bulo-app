@@ -132,6 +132,7 @@ export class DeliveryService {
       route: {
         geometry: route.geometry,
         byRoads: route.byRoads,
+        maneuvers: route.maneuvers,
         totalKm: round(route.legKm.reduce((a, b) => a + b, 0)),
         totalMinutes: Math.round(eta.at(-1) ?? 0),
       },

@@ -92,10 +92,13 @@ function CatalogScreen() {
   }, []);
 
   const renderItem: ListRenderItem<Product> = useCallback(
-    ({ item }) => (
-      <View style={styles.cell} onTouchStart={rememberSearch}>
-        <ProductCard product={item} canOrder={canOrder} />
-      </View>
+    ({ item, index }) => (
+      // карточки появляются «каскадом» — и при первом открытии, и после смены фильтра
+      <FadeIn style={styles.cell} delay={(index % 6) * 45} offset={14}>
+        <View style={{ flex: 1 }} onTouchStart={rememberSearch}>
+          <ProductCard product={item} canOrder={canOrder} />
+        </View>
+      </FadeIn>
     ),
     [canOrder, rememberSearch],
   );

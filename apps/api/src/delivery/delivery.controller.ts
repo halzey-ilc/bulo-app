@@ -1,8 +1,10 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
-import { IsBoolean, IsLatitude, IsLongitude, IsNumber, IsOptional } from 'class-validator';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Type } from 'class-transformer';
+import { IsBoolean, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
 import { AuthUser } from '../common/auth-user';
 import { CurrentUser, Roles } from '../common/decorators';
 import { DeliveryService } from './delivery.service';
+import { RoutingService } from './routing.service';
 
 class LocationDto {
   @IsLatitude() lat: number;
@@ -43,6 +45,33 @@ export class CourierController {
   @Post('orders/:id/arrived')
   arrived(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.delivery.arrived(user, id);
+  }
+}
+
+class SuggestQuery {
+  @IsString() @MaxLength(200) q: string;
+  @IsOptional() @Type(() => Number) @IsLatitude() lat?: number;
+  @IsOptional() @Type(() => Number) @IsLongitude() lng?: number;
+}
+
+class ReverseQuery {
+  @Type(() => Number) @IsLatitude() lat: number;
+  @Type(() => Number) @IsLongitude() lng: number;
+}
+
+/** Поиск адреса для выбора точки доставки: подсказки по мере ввода и адрес под пином. */
+@Controller('geo')
+export class GeoController {
+  constructor(private readonly routing: RoutingService) {}
+
+  @Get('suggest')
+  suggest(@Query() q: SuggestQuery) {
+    return this.routing.suggest(q.q, q.lat != null && q.lng != null ? { lat: q.lat, lng: q.lng } : undefined);
+  }
+
+  @Get('reverse')
+  reverse(@Query() q: ReverseQuery) {
+    return this.routing.reverse(q.lat, q.lng);
   }
 }
 

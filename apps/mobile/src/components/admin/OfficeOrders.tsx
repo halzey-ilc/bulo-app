@@ -9,22 +9,23 @@ import { addDaysIso, dateChip, dayLabel, money, plural, todayIso } from '../../l
 import { useLoad } from '../../lib/useLoad';
 import { useAuth } from '../../store/auth';
 import { toast } from '../../store/ui';
-import { ACTION_LABELS, allowedTransitions, ORDER_STATUS_LABELS, OrderStatus, Role } from '../../shared';
+import { ACTION_LABELS, allowedTransitions, canMarkPaid, ORDER_STATUS_LABELS, OrderStatus, Role } from '../../shared';
 import { colors, fonts, radius, shadows, space } from '../../theme';
 import { callPhone } from '../contacts';
 import { Header, TAB_BAR_SPACE } from '../layout';
 import { StatusChip } from '../order';
 import { ProductImage } from '../product';
-import { Button, Chip, EmptyState, ErrorState, T, Touchable } from '../ui';
+import { Button, Chip, EmptyState, ErrorState, hapticSuccess, T, Touchable } from '../ui';
 import { AIcon } from './icons';
 import { ActionItem, ago, ListSkeleton, SearchBar, Segmented, Sheet, TabHeader } from './kit';
 import { ORDER_REJECT_PRESETS, PayMethodSheet, ReasonSheet } from './Sheets';
 
 type FKey = 'new' | 'approved' | 'work' | 'ready' | 'all';
-const FILTERS: { key: FKey; label: string; statuses?: OrderStatus[] }[] = [
-  { key: 'new', label: 'Новые', statuses: ['NEW'] },
-  { key: 'approved', label: 'Ждут оплаты', statuses: ['APPROVED'] },
-  { key: 'work', label: 'В работе', statuses: ['PAID', 'IN_PRODUCTION'] },
+const OPEN: OrderStatus[] = ['NEW', 'APPROVED', 'PAID', 'IN_PRODUCTION', 'READY', 'SHIPPED', 'DELIVERED'];
+const FILTERS: { key: FKey; label: string; statuses?: OrderStatus[]; paid?: boolean }[] = [
+  { key: 'new', label: 'Новые', statuses: ['NEW', 'APPROVED', 'PAID'] },
+  { key: 'approved', label: 'Не оплачены', statuses: OPEN, paid: false },
+  { key: 'work', label: 'В работе', statuses: ['IN_PRODUCTION'] },
   { key: 'ready', label: 'Готовы', statuses: ['READY', 'SHIPPED'] },
   { key: 'all', label: 'Все' },
 ];
@@ -62,7 +63,10 @@ export function OfficeOrders({ stack }: { stack?: boolean }) {
   const date = DATES.find((d) => d.key === dkey)!;
   const day = date.shift != null ? addDaysIso(todayIso(), date.shift) : undefined;
 
-  const list = useLoad(() => Admin.orders({ status: filter.statuses, dateFrom: day, dateTo: day, search: query || undefined }), [fkey, day, query]);
+  const list = useLoad(
+    () => Admin.orders({ status: filter.statuses, paid: filter.paid, dateFrom: day, dateTo: day, search: query || undefined }),
+    [fkey, day, query],
+  );
   const dash = useLoad(() => Admin.dashboard(), []);
 
   const [menu, setMenu] = useState<OfficeOrder | null>(null);
@@ -81,7 +85,7 @@ export function OfficeOrders({ stack }: { stack?: boolean }) {
 
   /** Смена статуса с мгновенным откликом и откатом при ошибке. */
   const change = useCallback(
-    async (o: OfficeOrder, status: OrderStatus, extra: { comment?: string; paymentMethod?: string } = {}) => {
+    async (o: OfficeOrder, status: OrderStatus, extra: { comment?: string } = {}) => {
       const prev = list.data;
       const keep = !filter.statuses || filter.statuses.includes(status);
       list.setData((cur) => (cur ?? []).flatMap((x) => (x.id !== o.id ? [x] : keep ? [{ ...x, status }] : [])));
@@ -103,14 +107,14 @@ export function OfficeOrders({ stack }: { stack?: boolean }) {
   const onAction = useCallback(
     (o: OfficeOrder, a: OrderStatus) => {
       if (a === 'REJECTED' || a === 'CANCELLED') return setRejecting({ o, cancel: a === 'CANCELLED' });
-      if (a === 'PAID') return setPaying(o);
+      if (a === 'PAID') return setPaying(o); // оплата — отдельная отметка, не статус
       change(o, a).catch(() => {});
     },
     [change],
   );
 
   const d = dash.data;
-  const counts: Partial<Record<FKey, number>> = d ? { new: d.newOrders, approved: d.awaitingPayment.count, work: d.paid + d.inProduction, ready: d.ready } : {};
+  const counts: Partial<Record<FKey, number>> = d ? { new: d.newOrders, approved: d.awaitingPayment.count, work: d.inProduction, ready: d.ready } : {};
   const cancelMode = !!rejecting?.cancel;
 
   const header = (
@@ -200,10 +204,20 @@ export function OfficeOrders({ stack }: { stack?: boolean }) {
         onClose={() => setPaying(null)}
         title={`Оплата №${paying?.number ?? ''}`}
         total={paying?.total}
-        onPick={(m) => {
+        onPick={async (m) => {
           const o = paying!;
           setPaying(null);
-          change(o, 'PAID', { paymentMethod: m }).catch(() => {});
+          try {
+            await Orders.markPaid(o.id, { paymentMethod: m });
+            hapticSuccess();
+            toast.success(`№${o.number}: оплата отмечена`);
+            list.setData((cur) =>
+              (cur ?? []).flatMap((x) => (x.id !== o.id ? [x] : filter.paid === false ? [] : [{ ...x, paidAt: new Date().toISOString() }])),
+            );
+            dash.reload();
+          } catch (e) {
+            toast.error(errorMessage(e));
+          }
         }}
       />
     </View>
@@ -248,7 +262,8 @@ const OrderRow = memo(function OrderRow({
   onAction: (o: OfficeOrder, a: OrderStatus) => void;
   onMenu: (o: OfficeOrder) => void;
 }) {
-  const actions = role ? allowedTransitions(order.status, role).filter((a) => a !== 'CANCELLED') : [];
+  const pay = canMarkPaid(order, role);
+  const actions = [...(role ? allowedTransitions(order.status, role).filter((a) => a !== 'CANCELLED') : []).slice(0, pay ? 1 : 2), ...(pay ? (['PAID'] as OrderStatus[]) : [])];
   const fresh = order.status === 'NEW';
   const count = order.items.length;
   return (
@@ -322,8 +337,8 @@ const OrderRow = memo(function OrderRow({
 /** Меню действий по долгому нажатию. */
 function OrderMenu({ order, role, onClose, onAction }: { order: OfficeOrder | null; role: Role; onClose: () => void; onAction: (o: OfficeOrder, a: OrderStatus) => void }) {
   const o = order;
-  const actions = o && role ? allowedTransitions(o.status, role) : [];
-  const canEdit = !!o && (role === 'ADMIN' || role === 'MANAGER') && (o.status === 'NEW' || o.status === 'APPROVED');
+  const actions = o && role ? [...allowedTransitions(o.status, role), ...(canMarkPaid(o, role) ? (['PAID'] as OrderStatus[]) : [])] : [];
+  const canEdit = !!o && (role === 'ADMIN' || role === 'MANAGER') && ['NEW', 'APPROVED', 'PAID'].includes(o.status);
   return (
     <Sheet visible={!!o} onClose={onClose} title={o ? `Заказ №${o.number}` : ''} subtitle={o ? `${o.partner?.name} · ${money(o.total)}` : ''}>
       {o && (
@@ -331,7 +346,7 @@ function OrderMenu({ order, role, onClose, onAction }: { order: OfficeOrder | nu
           {actions
             .filter((a) => a !== 'CANCELLED' && a !== 'REJECTED')
             .map((a) => (
-              <ActionItem key={a} icon={a === 'APPROVED' ? 'check' : a === 'PAID' ? 'cash' : a === 'IN_PRODUCTION' ? 'chef' : a === 'READY' ? 'box' : 'truck'} tone="green" title={a === 'PAID' ? 'Оплата получена' : ACTION_LABELS[a] ?? a} subtitle={`→ ${ORDER_STATUS_LABELS[a]}`} onPress={() => onAction(o, a)} />
+              <ActionItem key={a} icon={a === 'APPROVED' ? 'check' : a === 'PAID' ? 'cash' : a === 'IN_PRODUCTION' ? 'chef' : a === 'READY' ? 'box' : 'truck'} tone="green" title={a === 'PAID' ? 'Оплата получена' : ACTION_LABELS[a] ?? a} subtitle={a === 'PAID' ? 'Статус заказа не изменится' : `→ ${ORDER_STATUS_LABELS[a]}`} onPress={() => onAction(o, a)} />
             ))}
           <ActionItem icon="receipt" title="Открыть заказ" subtitle="Состав, история, комментарий" onPress={() => { onClose(); router.push(`/order/${o.id}`); }} />
           {canEdit && <ActionItem icon="edit" title="Изменить состав" subtitle="По согласованию с партнёром" onPress={() => { onClose(); router.push(`/admin/order-edit/${o.id}`); }} />}

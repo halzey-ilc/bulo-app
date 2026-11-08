@@ -60,7 +60,7 @@ export default function OrderEditScreen() {
     );
   }
 
-  const editable = o.status === 'NEW' || o.status === 'APPROVED';
+  const editable = o.status === 'NEW' || o.status === 'APPROVED' || o.status === 'PAID';
   const active = lines.filter((l) => l.qty > 0);
   const total = active.reduce((a, l) => a + (l.price ?? 0) * l.qty, 0);
   const unknown = active.some((l) => l.price == null);

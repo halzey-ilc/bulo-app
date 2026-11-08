@@ -17,10 +17,10 @@ import { isOffice, useAuth, usePersona } from '../../src/store/auth';
 import { usePrefs } from '../../src/store/prefs';
 import { colors, fonts, radius, space } from '../../src/theme';
 
-// Офис — управление каталогом (видимость, цены, фото).
+// Офис и кассир — управление каталогом (наличие, цены, фото).
 export default function CatalogTab() {
   const persona = usePersona();
-  return isOffice(persona) ? <AdminCatalog /> : <CatalogScreen />;
+  return isOffice(persona) || persona === 'cashier' ? <AdminCatalog /> : <CatalogScreen />;
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/ё/g, 'е').trim();

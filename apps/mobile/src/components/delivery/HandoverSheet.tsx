@@ -1,18 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Easing, StyleSheet, View } from 'react-native';
+import { Animated, StyleSheet, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { errorMessage, Orders } from '../../api';
-import { colors, fonts, radius, shadows, space } from '../../theme';
+import { colors, fonts, shadows, space } from '../../theme';
 import { Sheet } from '../admin/kit';
 import { Icon } from '../Icon';
-import { Field, hapticSuccess, T, tap, Touchable } from '../ui';
+import { Button, Field, hapticSuccess, T } from '../ui';
 
-const LEN = 4;
 
-/**
- * Вручение заказа по коду: получатель называет 4 цифры, курьер вводит их на клавиатуре.
- * Неверный код — «встряхиваем» ячейки; верный — галочка, вибрация и закрытие.
- */
+/** Вручение заказа без кода (как в доставке Яндекса): курьер отдаёт заказ и подтверждает одной кнопкой. */
 export function HandoverSheet({
   order,
   onClose,
@@ -22,13 +18,10 @@ export function HandoverSheet({
   onClose: () => void;
   onDelivered: (orderId: string) => void;
 }) {
-  const [code, setCode] = useState('');
   const [receivedBy, setReceivedBy] = useState('');
-  const [showName, setShowName] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
-  const shake = useRef(new Animated.Value(0)).current;
   const success = useRef(new Animated.Value(0)).current;
   const current = useRef(order);
   if (order) current.current = order;
@@ -36,9 +29,7 @@ export function HandoverSheet({
 
   useEffect(() => {
     if (order) {
-      setCode('');
       setReceivedBy('');
-      setShowName(false);
       setError(null);
       setBusy(false);
       setDone(false);
@@ -46,19 +37,12 @@ export function HandoverSheet({
     }
   }, [order, success]);
 
-  const runShake = () => {
-    shake.setValue(0);
-    Animated.sequence(
-      [14, -12, 10, -8, 5, -3, 0].map((v) => Animated.timing(shake, { toValue: v, duration: 45, easing: Easing.linear, useNativeDriver: true })),
-    ).start();
-  };
-
-  const submit = async (value: string) => {
-    if (!o || busy || value.length < LEN) return;
+  const submit = async () => {
+    if (!o || busy) return;
     setBusy(true);
     setError(null);
     try {
-      await Orders.setStatus(o.orderId, 'DELIVERED', { code: value, ...(receivedBy.trim() ? { receivedBy: receivedBy.trim() } : {}) });
+      await Orders.setStatus(o.orderId, 'DELIVERED', receivedBy.trim() ? { receivedBy: receivedBy.trim() } : {});
       hapticSuccess();
       setDone(true);
       Animated.spring(success, { toValue: 1, useNativeDriver: true, speed: 10, bounciness: 12 }).start();
@@ -66,28 +50,9 @@ export function HandoverSheet({
     } catch (e) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       setError(errorMessage(e));
-      runShake();
-      setTimeout(() => setCode(''), 380);
     } finally {
       setBusy(false);
     }
-  };
-
-  const press = (k: string) => {
-    if (busy || done) return;
-    tap();
-    if (k === 'del') {
-      setError(null);
-      setCode((c) => c.slice(0, -1));
-      return;
-    }
-    setError(null);
-    setCode((c) => {
-      if (c.length >= LEN) return c;
-      const next = c + k;
-      if (next.length === LEN) setTimeout(() => void submit(next), 120);
-      return next;
-    });
   };
 
   return (
@@ -106,86 +71,31 @@ export function HandoverSheet({
           </T>
         </View>
       ) : (
-        <>
+        <View style={{ gap: space.md }}>
           <T v="body" color={colors.textMuted}>
-            Попросите получателя назвать код из приложения или СМС — без кода заказ не отметить.
+            Передайте заказ получателю и нажмите «Заказ вручён». Код не нужен.
           </T>
-          {showName ? (
-            <Field label="Кто принял" placeholder={o?.partner.contactName || 'Имя получателя'} value={receivedBy} onChangeText={setReceivedBy} autoCapitalize="words" returnKeyType="done" />
-          ) : (
-            <Touchable onPress={() => setShowName(true)} haptic style={styles.nameLink}>
-              <Icon name="user" size={16} color={colors.mango} />
-              <T v="small" color={colors.mango} style={{ fontFamily: fonts.bold }}>
-                Указать, кто принял (необязательно)
-              </T>
-            </Touchable>
+          <Field
+            label="Кто принял (необязательно)"
+            placeholder={o?.partner.contactName || 'Имя получателя'}
+            value={receivedBy}
+            onChangeText={setReceivedBy}
+            autoCapitalize="words"
+            returnKeyType="done"
+          />
+          {!!error && (
+            <T v="small" color={colors.danger} center style={{ fontFamily: fonts.bold }}>
+              {error}
+            </T>
           )}
-          <Animated.View style={[styles.cells, { transform: [{ translateX: shake }] }]}>
-            {Array.from({ length: LEN }, (_, i) => {
-              const filled = i < code.length;
-              const focus = i === code.length && !busy;
-              return (
-                <View key={i} style={[styles.cell, filled && styles.cellFilled, focus && styles.cellFocus, !!error && styles.cellError]}>
-                  {busy && i === LEN - 1 && code.length === LEN ? (
-                    <ActivityIndicator color={colors.mango} />
-                  ) : (
-                    <T style={styles.digit} color={error ? colors.danger : colors.text}>
-                      {code[i] ?? ''}
-                    </T>
-                  )}
-                </View>
-              );
-            })}
-          </Animated.View>
-          <View style={{ minHeight: 20, alignItems: 'center' }}>
-            {!!error && (
-              <T v="small" color={colors.danger} center style={{ fontFamily: fonts.bold }}>
-                {error}
-              </T>
-            )}
-          </View>
-
-
-          <View style={styles.pad}>
-            {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'].map((k, i) =>
-              k === '' ? (
-                <View key={i} style={styles.key} />
-              ) : (
-                <Touchable key={i} onPress={() => press(k)} scaleTo={0.92} style={[styles.key, styles.keyBtn, k === 'del' && { backgroundColor: 'transparent', ...noShadow }]} accessibilityLabel={k === 'del' ? 'Стереть' : k}>
-                  {k === 'del' ? <Icon name="chevronLeft" size={26} color={colors.text} /> : <T style={styles.keyText}>{k}</T>}
-                </Touchable>
-              ),
-            )}
-          </View>
-        </>
+          <Button title="Заказ вручён" icon="check" onPress={submit} loading={busy} />
+        </View>
       )}
     </Sheet>
   );
 }
 
-const noShadow = { elevation: 0, shadowOpacity: 0 };
-
 const styles = StyleSheet.create({
-  cells: { flexDirection: 'row', justifyContent: 'center', gap: space.md, marginTop: space.sm },
-  cell: {
-    width: 54,
-    height: 58,
-    borderRadius: radius.md,
-    backgroundColor: colors.white,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cellFilled: { borderColor: colors.cambodia },
-  cellFocus: { borderColor: colors.mango },
-  cellError: { borderColor: colors.danger, backgroundColor: colors.dangerSoft },
-  digit: { fontFamily: fonts.extrabold, fontSize: 28, lineHeight: 34 },
-  nameLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 6 },
-  pad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: space.sm },
-  key: { width: '31.5%', height: 52, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
-  keyBtn: { backgroundColor: colors.white, ...shadows.soft },
-  keyText: { fontFamily: fonts.bold, fontSize: 26, lineHeight: 32, color: colors.text },
   done: { alignItems: 'center', gap: space.sm, paddingVertical: space.xxl },
   doneCircle: {
     width: 104,

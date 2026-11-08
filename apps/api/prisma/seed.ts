@@ -50,7 +50,7 @@ async function main() {
   // Розничные цены — для клиентов-покупателей (личные кабинеты создаёт админ)
   const retail = await prisma.priceType.upsert({
     where: { oneCId: 'demo-retail' },
-    create: { oneCId: 'demo-retail', name: 'Розничная', isDefault: false },
+    create: { oneCId: 'demo-retail', name: 'Розничная', isDefault: false, isRetail: true },
     update: {},
   });
 
@@ -194,6 +194,7 @@ async function main() {
     { phone: '+996700333333', login: 'accountant', name: 'Бухгалтер', role: 'ACCOUNTANT' },
     { phone: '+996700444444', login: 'workshop', name: 'Цех', role: 'WORKSHOP' },
     { phone: '+996700555555', login: 'courier', name: 'Курьер', role: 'COURIER' },
+    { phone: '+996700777777', login: 'cashier', name: 'Кассир', role: 'CASHIER' },
     { phone: '+996700666666', login: 'client', name: 'Жаныл', role: 'CLIENT', partnerId: client.id },
   ];
   for (const u of demoUsers) {

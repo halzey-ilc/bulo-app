@@ -54,7 +54,7 @@ export default function PartnerScreen() {
       throw e;
     }
   };
-  const debt = p.orders.filter((o) => o.status === 'APPROVED').reduce((a, o) => a + o.total, 0);
+  const debt = p.orders.filter((o) => !o.paidAt && o.status !== 'REJECTED' && o.status !== 'CANCELLED').reduce((a, o) => a + o.total, 0);
   const totalAll = p.orders.filter((o) => o.status !== 'REJECTED' && o.status !== 'CANCELLED').reduce((a, o) => a + o.total, 0);
   const wa = p.phone.replace(/\D/g, '');
 

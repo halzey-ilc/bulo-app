@@ -64,8 +64,10 @@ export const Orders = {
   setStatus: (
     id: string,
     status: OrderStatus,
-    extra: { comment?: string; paymentMethod?: string; code?: string; receivedBy?: string } = {},
+    extra: { comment?: string; receivedBy?: string } = {},
   ) => api.post<Order>(`/orders/${id}/status`, { status, ...extra }),
+  /** Отметить оплату (бухгалтер, админ). Статус заказа не меняется. */
+  markPaid: (id: string, extra: { paymentMethod?: string; comment?: string } = {}) => api.post<Order>(`/orders/${id}/payment`, extra),
   tracking: (id: string) => api.get<Tracking>(`/orders/${id}/tracking`),
 };
 

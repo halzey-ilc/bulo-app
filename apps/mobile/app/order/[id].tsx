@@ -72,16 +72,16 @@ export default function OrderDetail() {
         {/* Доставка: курьер везёт — живой трекинг; заказ собран — скоро передадим */}
         {(buyer || isOffice(persona)) && (order.status === 'SHIPPED' || order.status === 'READY') && <TrackCard order={order} />}
 
-        {/* Оплата: способ ещё не выбран — место под онлайн-оплату */}
-        {order.status === 'APPROVED' && (
+        {/* Оплата: способ ещё не выбран — место под онлайн-оплату. Заказ готовят и без неё. */}
+        {buyer && !order.paidAt && order.status !== 'REJECTED' && order.status !== 'CANCELLED' && (
           <Card style={styles.payment}>
             <View style={[styles.payIcon]}>
               <Icon name="card" size={24} color={colors.mango} />
             </View>
             <View style={{ flex: 1, gap: 2 }}>
-              <T v="h3">Ожидает оплаты · {money(order.total)}</T>
+              <T v="h3">К оплате · {money(order.total)}</T>
               <T v="small" color={colors.textMuted}>
-                Способ оплаты уточняется — менеджер свяжется с вами. Скоро здесь появится оплата онлайн.
+                Заказ уже готовят. Способ оплаты уточняется — менеджер свяжется с вами.
               </T>
             </View>
           </Card>

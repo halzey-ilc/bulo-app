@@ -46,7 +46,7 @@ export function OfficeDashboard() {
   const persona = usePersona();
   const isAdmin = persona === 'admin';
   const dash = useLoad(() => Admin.dashboard(), []);
-  const queue = useLoad(() => Admin.orders({ status: ['NEW', 'APPROVED'] }), []);
+  const queue = useLoad(() => Admin.orders({ status: ['NEW', 'APPROVED', 'PAID', 'IN_PRODUCTION', 'READY', 'SHIPPED'] }), []);
   const pending = useLoad(() => Admin.partners({ status: 'PENDING' }), []);
   const { sales, days } = useWeekRevenue();
 
@@ -245,11 +245,11 @@ function buildAttention(orders: OfficeOrder[], pending: { id: string; name: stri
       icon: 'hourglass',
       tone: colors.primarySoft,
       fg: colors.mango,
-      title: `Заказ №${o.number} ждёт ${ago(o.createdAt).replace(' назад', '')}`,
+      title: `Заказ №${o.number} не в цехе уже ${ago(o.createdAt).replace(' назад', '')}`,
       sub: `${o.partner?.name} · ${money(o.total)}`,
       onPress: () => router.push(`/order/${o.id}`),
     });
-  const unpaid = orders.filter((o) => o.status === 'APPROVED' && o.deliveryDate <= tomorrow);
+  const unpaid = orders.filter((o) => !o.paidAt && o.deliveryDate <= tomorrow);
   if (unpaid.length)
     out.push({
       key: 'unpaid',
@@ -365,7 +365,10 @@ export function AccountantDashboard() {
   const weekStart = weekStartIso();
   const dash = useLoad(() => Admin.dashboard(), []);
   const debts = useLoad(() => Admin.debts(), []);
-  const paidWeek = useLoad(() => Admin.orders({ status: ['PAID', 'IN_PRODUCTION', 'READY', 'SHIPPED', 'DELIVERED'], dateFrom: addDaysIso(weekStart, -21) }), [weekStart]);
+  const paidWeek = useLoad(
+    () => Admin.orders({ status: ['NEW', 'APPROVED', 'PAID', 'IN_PRODUCTION', 'READY', 'SHIPPED', 'DELIVERED'], paid: true, dateFrom: addDaysIso(weekStart, -21) }),
+    [weekStart],
+  );
   const onec = useLoad(() => Admin.onecStatus(), []);
   const { sales, days } = useWeekRevenue();
 

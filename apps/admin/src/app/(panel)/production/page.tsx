@@ -94,15 +94,16 @@ export default function ProductionPage() {
 
               {isSupplement && pendingOrders.length > 0 && (
                 <Note tone="yellow" className="mt-4">
-                  На эту дату уже есть сводная накладная. Новая будет <b>дозаказом</b> — только по заказам, оплаченным после неё.
+                  На эту дату уже есть сводная накладная. Новая будет <b>дозаказом</b> — только по заказам, принятым после неё.
                 </Note>
               )}
               {data.awaitingPayment > 0 && (
                 <Note tone="blue" icon={<Wallet className="h-4 w-4" />} className="mt-4">
-                  Ещё {data.awaitingPayment} {plural(data.awaitingPayment, 'заказ ждёт', 'заказа ждут', 'заказов ждут')} оплаты на эту
-                  дату — в производство заказ попадает после оплаты.{' '}
+                  {data.awaitingPayment} {plural(data.awaitingPayment, 'заказ', 'заказа', 'заказов')} на эту дату ещё не{' '}
+                  {plural(data.awaitingPayment, 'оплачен', 'оплачены', 'оплачены')}. Готовить можно и без оплаты, бухгалтер отметит её
+                  отдельно.{' '}
                   {me.role !== 'WORKSHOP' && (
-                    <Link href={`/orders?status=APPROVED&dateFrom=${date}&dateTo=${date}`} className="font-semibold underline">
+                    <Link href={`/orders?paid=false&dateFrom=${date}&dateTo=${date}`} className="font-semibold underline">
                       Посмотреть
                     </Link>
                   )}

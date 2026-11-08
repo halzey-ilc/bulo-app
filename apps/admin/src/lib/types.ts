@@ -6,6 +6,8 @@ export interface PriceType {
   id: string;
   name: string;
   isDefault: boolean;
+  /** Розничные цены: их ведёт кассир */
+  isRetail?: boolean;
   oneCId: string | null;
   _count?: { partners: number };
 }

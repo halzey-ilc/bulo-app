@@ -25,13 +25,25 @@ import {
   cx,
 } from '@/components/ui';
 import { api, photoSrc } from '@/lib/api';
+import { useMe } from '@/lib/auth';
 import { fmtMoney, fmtQty } from '@/lib/format';
 import { useLoad } from '@/lib/hooks';
 import type { Category, PriceType, Product } from '@/lib/types';
 
 type Tab = 'products' | 'categories' | 'prices';
 
+/** Кассир добавляет и убирает товары, меняет фото и розничные цены. Остальное в каталоге ему недоступно. */
+function useCashier() {
+  return useMe().role === 'CASHIER';
+}
+
+/** Может ли текущий пользователь менять цену этого типа. */
+function canEditPrice(pt: PriceType, cashier: boolean) {
+  return !cashier || !!pt.isRetail;
+}
+
 export default function CatalogPage() {
+  const cashier = useCashier();
   const [tab, setTab] = useState<Tab>('products');
   const products = useLoad(() => api.get<Product[]>('/admin/catalog/products'), []);
   const categories = useLoad(() => api.get<Category[]>('/admin/catalog/categories'), []);
@@ -39,17 +51,26 @@ export default function CatalogPage() {
 
   return (
     <>
-      <PageHeader title="Каталог" subtitle="Товары, категории и цены, которые видят партнёры в приложении" />
+      <PageHeader
+        title="Каталог"
+        subtitle={
+          cashier
+            ? 'Добавляйте и убирайте товары, меняйте фото и розничные цены'
+            : 'Товары, категории и цены, которые видят партнёры в приложении'
+        }
+      />
       <div className="mb-5">
-        <Tabs
-          value={tab}
-          onChange={setTab}
-          items={[
-            { value: 'products', label: 'Товары' },
-            { value: 'categories', label: 'Категории' },
-            { value: 'prices', label: 'Типы цен' },
-          ]}
-        />
+        {!cashier && (
+          <Tabs
+            value={tab}
+            onChange={setTab}
+            items={[
+              { value: 'products', label: 'Товары' },
+              { value: 'categories', label: 'Категории' },
+              { value: 'prices', label: 'Типы цен' },
+            ]}
+          />
+        )}
       </div>
       {tab === 'products' && (
         <ProductsTab
@@ -87,6 +108,7 @@ function ProductsTab({
   priceTypes: PriceType[];
 }) {
   const toast = useToast();
+  const cashier = useCashier();
   const [search, setSearch] = useState('');
   const [cat, setCat] = useState('');
   const [editing, setEditing] = useState<Product | 'new' | null>(null);
@@ -200,7 +222,7 @@ function ProductsTab({
                       <Td>
                         <button
                           onClick={() => toggle(p, 'isNew')}
-                          disabled={busyId === p.id + 'isNew'}
+                          disabled={cashier || busyId === p.id + 'isNew'}
                           className={cx(
                             'rounded-full px-2.5 py-1 text-xs font-semibold',
                             p.isNew ? 'bg-mango-soft text-mango-dark' : 'bg-oat text-muted hover:text-cambodia',
@@ -215,7 +237,7 @@ function ProductsTab({
                           checked={p.visible}
                           disabled={busyId === p.id + 'visible'}
                           onChange={() => toggle(p, 'visible')}
-                          label={<span className="text-xs text-muted">{p.visible ? 'виден' : 'скрыт'}</span>}
+                          label={<span className="text-xs text-muted">{p.visible ? 'в продаже' : 'убран'}</span>}
                         />
                       </Td>
                       <Td className="text-right">
@@ -273,6 +295,10 @@ function ProductModal({
   onSaved: () => void;
 }) {
   const toast = useToast();
+  const cashier = useCashier();
+  /** Кассир не правит описание существующих товаров: только фото, розничная цена и удаление */
+  const locked = cashier && !!product;
+  const [removing, setRemoving] = useState(false);
   const [current, setCurrent] = useState<Product | null>(product);
   const [f, setF] = useState({
     categoryId: product?.categoryId ?? categories[0]?.id ?? '',
@@ -299,9 +325,40 @@ function ProductModal({
   const mult = Number(f.multiplicity.replace(',', '.'));
   const valid = f.name.trim().length > 0 && f.categoryId && mult > 0;
 
+  const priceItems = () => {
+    const items = Object.entries(prices)
+      .filter(([id, v]) => v.trim() !== '' && canEditPrice(priceTypes.find((pt) => pt.id === id)!, cashier))
+      .map(([priceTypeId, v]) => ({ priceTypeId, price: Number(v.replace(',', '.')) }));
+    if (items.some((i) => isNaN(i.price) || i.price < 0)) throw new Error('Проверьте цены');
+    return items;
+  };
+
+  const remove = async () => {
+    if (!current || !confirm(`Удалить «${current.name}»? Если товар уже заказывали, он просто уберётся из каталога.`)) return;
+    setRemoving(true);
+    try {
+      const res = await api.del<{ hidden: boolean }>(`/admin/catalog/products/${current.id}`);
+      toast.success(res.hidden ? 'Товар убран из каталога' : 'Товар удалён');
+      onSaved();
+      onClose();
+    } catch (e) {
+      toast.error(e);
+    } finally {
+      setRemoving(false);
+    }
+  };
+
   const save = async () => {
     setBusy(true);
     try {
+      if (locked && current) {
+        const items = priceItems();
+        if (items.length) await api.put(`/admin/catalog/products/${current.id}/prices`, { items });
+        toast.success('Сохранено');
+        onSaved();
+        onClose();
+        return;
+      }
       const body = {
         categoryId: f.categoryId,
         name: f.name.trim(),
@@ -315,14 +372,11 @@ function ProductModal({
         visible,
         isNew,
       };
+      const items = priceItems();
       const saved = current
         ? await api.patch<Product>(`/admin/catalog/products/${current.id}`, body)
         : await api.post<Product>('/admin/catalog/products', body);
-      const items = Object.entries(prices)
-        .filter(([, v]) => v.trim() !== '')
-        .map(([priceTypeId, v]) => ({ priceTypeId, price: Number(v.replace(',', '.')) }));
-      if (items.some((i) => isNaN(i.price) || i.price < 0)) throw new Error('Проверьте цены');
-      await api.put(`/admin/catalog/products/${saved.id}/prices`, { items });
+      if (items.length) await api.put(`/admin/catalog/products/${saved.id}/prices`, { items });
       toast.success(current ? 'Товар сохранён' : 'Товар создан — теперь можно добавить фото');
       onSaved();
       if (current) onClose();
@@ -359,15 +413,27 @@ function ProductModal({
       title={current ? current.name || 'Товар' : 'Новый товар'}
       footer={
         <>
+          {current && (
+            <Button variant="danger" onClick={remove} loading={removing} className="mr-auto">
+              <Trash2 className="h-4 w-4" /> Удалить
+            </Button>
+          )}
           <Button variant="secondary" onClick={onClose}>
             {current && !product ? 'Готово' : 'Отмена'}
           </Button>
-          <Button onClick={save} loading={busy} disabled={!valid}>
-            {current ? 'Сохранить' : 'Создать'}
-          </Button>
+          {!(cashier && current && !product) && (
+            <Button onClick={save} loading={busy} disabled={!valid}>
+              {current ? 'Сохранить' : 'Создать'}
+            </Button>
+          )}
         </>
       }
     >
+      {locked && (
+        <Note tone="blue" className="mb-4 text-sm">
+          Можно заменить фото, поменять розничную цену или удалить товар. Название и описание меняет администратор.
+        </Note>
+      )}
       <div className="grid gap-6 md:grid-cols-[180px_1fr]">
         <div>
           <Thumb url={current?.photoUrl ?? null} size="h-44 w-full md:w-44" />
@@ -395,7 +461,7 @@ function ProductModal({
           <p className="mt-2 text-[11px] text-muted">{current ? 'JPG, PNG или WEBP до 8 МБ' : 'Фото можно добавить после создания'}</p>
         </div>
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <fieldset disabled={locked} className="grid gap-4 disabled:opacity-60 sm:grid-cols-2">
             <Field label="Название *" className="sm:col-span-2">
               <Input value={f.name} onChange={set('name')} />
             </Field>
@@ -428,31 +494,43 @@ function ProductModal({
             <Field label="Состав" className="sm:col-span-2">
               <Textarea value={f.composition} onChange={set('composition')} className="min-h-[60px]" />
             </Field>
-          </div>
+          </fieldset>
 
           <div className="rounded-2xl border border-line p-4">
-            <div className="mb-3 text-sm font-bold">Цены, сом</div>
+            <div className="mb-3 text-sm font-bold">{cashier ? 'Розничная цена, сом' : 'Цены, сом'}</div>
             <div className="grid gap-3 sm:grid-cols-2">
-              {priceTypes.map((pt) => (
-                <Field key={pt.id} label={`${pt.name}${pt.isDefault ? ' (по умолчанию)' : ''}`}>
-                  <Input
-                    value={prices[pt.id] ?? ''}
-                    onChange={(e) => setPrices({ ...prices, [pt.id]: e.target.value })}
-                    inputMode="decimal"
-                    placeholder="—"
-                  />
-                </Field>
-              ))}
+              {priceTypes
+                .filter((pt) => canEditPrice(pt, cashier))
+                .map((pt) => (
+                  <Field
+                    key={pt.id}
+                    label={`${pt.name}${pt.isDefault ? ' (по умолчанию)' : ''}${pt.isRetail && !cashier ? ' — ведёт кассир' : ''}`}
+                  >
+                    <Input
+                      value={prices[pt.id] ?? ''}
+                      onChange={(e) => setPrices({ ...prices, [pt.id]: e.target.value })}
+                      inputMode="decimal"
+                      placeholder="—"
+                    />
+                  </Field>
+                ))}
             </div>
+            {cashier && !priceTypes.some((pt) => pt.isRetail) && (
+              <p className="text-sm text-muted">Розничный тип цен не настроен — обратитесь к администратору.</p>
+            )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-6">
-            <Toggle checked={visible} onChange={setVisible} label="Показывать в каталоге" />
-            <Toggle checked={isNew} onChange={setIsNew} label="Новинка" />
-            <Field label="Порядок" className="w-24">
-              <Input value={f.sortOrder} onChange={set('sortOrder')} inputMode="numeric" />
-            </Field>
-          </div>
+          {!locked && (
+            <div className="flex flex-wrap items-center gap-6">
+              <Toggle checked={visible} onChange={setVisible} label="В продаже" />
+              {!cashier && <Toggle checked={isNew} onChange={setIsNew} label="Новинка" />}
+              {!cashier && (
+                <Field label="Порядок" className="w-24">
+                  <Input value={f.sortOrder} onChange={set('sortOrder')} inputMode="numeric" />
+                </Field>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </Modal>

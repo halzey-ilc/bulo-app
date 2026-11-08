@@ -25,7 +25,7 @@ export const NAV: NavItem[] = [
   { href: '/', label: 'Сводка', icon: LayoutDashboard, roles: ['ADMIN', 'MANAGER', 'ACCOUNTANT'] },
   { href: '/orders', label: 'Заказы', icon: ClipboardList, roles: ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'WORKSHOP', 'COURIER'] },
   { href: '/partners', label: 'Партнёры', icon: Store, roles: ['ADMIN', 'MANAGER', 'ACCOUNTANT'] },
-  { href: '/catalog', label: 'Каталог', icon: BookOpen, roles: ['ADMIN', 'MANAGER'] },
+  { href: '/catalog', label: 'Каталог', icon: BookOpen, roles: ['ADMIN', 'MANAGER', 'CASHIER'] },
   { href: '/production', label: 'Производство', icon: Factory, roles: ['ADMIN', 'MANAGER', 'WORKSHOP', 'ACCOUNTANT'] },
   { href: '/invoices', label: 'Накладные', icon: FileText, roles: ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'COURIER'] },
   { href: '/reports', label: 'Отчёты', icon: ChartColumn, roles: ['ADMIN', 'MANAGER', 'ACCOUNTANT'] },
@@ -35,12 +35,13 @@ export const NAV: NavItem[] = [
   { href: '/audit', label: 'Журнал', icon: ScrollText, roles: ['ADMIN'] },
 ];
 
-export const STAFF_PANEL_ROLES: Role[] = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'WORKSHOP', 'COURIER'];
+export const STAFF_PANEL_ROLES: Role[] = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'WORKSHOP', 'COURIER', 'CASHIER'];
 
 /** Стартовая страница роли */
 export function homeFor(role: Role): string {
   if (role === 'WORKSHOP') return '/production';
   if (role === 'COURIER') return '/invoices';
+  if (role === 'CASHIER') return '/catalog';
   return '/';
 }
 

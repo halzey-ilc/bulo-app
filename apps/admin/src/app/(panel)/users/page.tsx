@@ -32,10 +32,11 @@ import type { Partner, User } from '@/lib/types';
 
 const ROLE_INFO: { role: Role; text: string; soon?: boolean }[] = [
   { role: 'ADMIN', text: 'Полный доступ, управление пользователями и настройками' },
-  { role: 'MANAGER', text: 'Одобряет заказы и партнёров, ведёт каталог и производство' },
+  { role: 'MANAGER', text: 'Следит за заказами партнёров и правит их, одобряет партнёров, ведёт каталог' },
   { role: 'ACCOUNTANT', text: 'Отмечает оплату, накладные, отчёты, обмен с 1С' },
   { role: 'WORKSHOP', text: 'Сводка на производство, печать накладной, «Готово»' },
   { role: 'COURIER', text: 'Накладные на отгрузку, «Передан» и «Доставлен»' },
+  { role: 'CASHIER', text: 'Добавляет и убирает товары, меняет фото и розничные цены' },
   { role: 'PARTNER', text: 'Сотрудник партнёра: заказы в мобильном приложении' },
   { role: 'GUEST', text: 'Временный доступ: смотреть каталог, по желанию — заказывать' },
   { role: 'CLIENT', text: 'Розничный покупатель', soon: true },
@@ -47,12 +48,13 @@ const ROLE_CHIP: Partial<Record<Role, string>> = {
   ACCOUNTANT: 'bg-butter text-[#6b5300]',
   WORKSHOP: 'bg-cambodia-soft text-cambodia',
   COURIER: 'bg-[#e9e2f6] text-[#4b3a7a]',
+  CASHIER: 'bg-[#fde7d9] text-[#8a3b12]',
   PARTNER: 'bg-ice text-[#0b4a7d]',
   GUEST: 'bg-oat-dark text-cambodia',
 };
 
 type TabValue = 'ALL' | 'STAFF' | 'PARTNER' | 'GUEST';
-const STAFF: Role[] = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'WORKSHOP', 'COURIER'];
+const STAFF: Role[] = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'WORKSHOP', 'COURIER', 'CASHIER'];
 
 function expired(u: User) {
   return !!u.accessExpiresAt && new Date(u.accessExpiresAt) < new Date();

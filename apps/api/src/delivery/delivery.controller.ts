@@ -50,7 +50,7 @@ export class CourierController {
 export class TrackingController {
   constructor(private readonly delivery: DeliveryService) {}
 
-  /** Отслеживание доставки: этап, позиция курьера, маршрут, время прибытия, код вручения. */
+  /** Отслеживание доставки: этап, позиция курьера, маршрут, время прибытия. */
   @Get(':id/tracking')
   tracking(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.delivery.tracking(user, id);

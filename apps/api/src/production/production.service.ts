@@ -5,6 +5,7 @@ import { fromDbDate, isIsoDate, toDbDate } from '../common/dates';
 import { ExcelService, ExcelSheet } from '../common/excel.service';
 import { PrismaService } from '../common/prisma.service';
 import { OutboxService } from '../onec/outbox.service';
+import { AWAITING_PRODUCTION } from '../orders/order-rules';
 import { OrdersService } from '../orders/orders.service';
 import { aggregateForProduction, AggregateLine } from './aggregate';
 
@@ -57,12 +58,12 @@ export class ProductionService {
     return toDbDate(d);
   }
 
-  /** Что войдёт в накладную (оплаченные, ещё не в цеху) и какие накладные уже сформированы на дату. */
+  /** Что войдёт в накладную (принятые, ещё не в цеху) и какие накладные уже сформированы на дату. */
   async summary(date: string) {
     const day = this.date(date);
     const [pending, sheets] = await Promise.all([
       this.prisma.order.findMany({
-        where: { deliveryDate: day, status: 'PAID', productionSheetId: null },
+        where: { deliveryDate: day, status: { in: AWAITING_PRODUCTION }, productionSheetId: null },
         include: lineInclude,
         orderBy: { number: 'asc' },
       }),
@@ -73,9 +74,11 @@ export class ProductionService {
       }),
     ]);
     const [awaitingPayment, inWork] = await Promise.all([
-      this.prisma.order.count({ where: { deliveryDate: day, status: 'APPROVED' } }),
+      this.prisma.order.count({
+        where: { deliveryDate: day, paidAt: null, status: { notIn: ['REJECTED', 'CANCELLED'] } },
+      }),
       this.prisma.order.findMany({
-        where: { deliveryDate: day, status: { in: ['PAID', 'IN_PRODUCTION', 'READY'] } },
+        where: { deliveryDate: day, status: { in: [...AWAITING_PRODUCTION, 'IN_PRODUCTION', 'READY'] } },
         include: lineInclude,
       }),
     ]);
@@ -90,16 +93,16 @@ export class ProductionService {
   }
 
   /**
-   * Формирует сводную накладную по оплаченным заказам на дату и переводит их в производство.
+   * Формирует сводную накладную по принятым заказам на дату и переводит их в производство.
    * Если на дату уже есть накладная — новая помечается как дозаказ.
    */
   async createSheet(user: AuthUser, date: string) {
     const day = this.date(date);
     const orders = await this.prisma.order.findMany({
-      where: { deliveryDate: day, status: 'PAID', productionSheetId: null },
+      where: { deliveryDate: day, status: { in: AWAITING_PRODUCTION }, productionSheetId: null },
       include: lineInclude,
     });
-    if (!orders.length) throw new BadRequestException('Нет оплаченных заказов, которые ещё не переданы в цех');
+    if (!orders.length) throw new BadRequestException('Нет новых заказов, которые ещё не переданы в цех');
 
     const existing = await this.prisma.productionSheet.count({ where: { date: day } });
     const sheet = await this.prisma.productionSheet.create({

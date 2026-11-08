@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg';
 import type { Product } from '../api';
+import { photoSrc } from '../api/admin';
 import { money } from '../lib/format';
 import { goTab } from '../lib/nav';
 import { normalizeQty, useCart, useInCart } from '../store/cart';
@@ -31,16 +32,18 @@ export const ProductImage = memo(function ProductImage({
 }) {
   // Цвет плитки — по товару (разнообразие в сетке), иконка — по категории.
   const tile = tileFor(seed ?? category);
-  if (photoUrl) {
+  // сервер отдаёт ссылки с localhost — подставляем адрес сервера, к которому подключено приложение
+  const uri = photoSrc(photoUrl);
+  if (uri) {
     return (
       <View style={[{ borderRadius: rounded, overflow: 'hidden', backgroundColor: tile.bg }, style]}>
         <Image
-          source={{ uri: photoUrl }}
+          source={{ uri }}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
           transition={180}
           cachePolicy="memory-disk"
-          recyclingKey={photoUrl}
+          recyclingKey={uri}
         />
       </View>
     );

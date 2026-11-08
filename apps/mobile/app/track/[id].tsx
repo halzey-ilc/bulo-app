@@ -22,7 +22,7 @@ import { colors, fonts, radius, shadows, space } from '../../src/theme';
 const POLL = 5_000;
 const LIVE: DeliveryStage[] = ['on_way', 'arriving', 'arrived'];
 
-/** Трекинг заказа для получателя: курьер на карте, время прибытия, код вручения. */
+/** Трекинг заказа для получателя: курьер на карте и время прибытия. */
 export default function TrackOrder() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
@@ -71,7 +71,6 @@ export default function TrackOrder() {
     <View style={{ gap: space.md }}>
       {!hasMap && <StageHero t={t} now={now} />}
       <StageBar stage={t.stage} />
-      {!!t.deliveryCode && t.stage !== 'delivered' && t.stage !== 'cancelled' && <CodeCard code={t.deliveryCode} urgent={t.stage === 'arrived' || t.stage === 'arriving'} />}
       {live && t.stopsBefore > 0 && (
         <View style={styles.note}>
           <Icon name="truck" size={18} color={colors.blueberry} />
@@ -217,12 +216,12 @@ function StageHero({ t, now }: { t: Tracking; now: number }) {
     case 'arriving':
       caption = 'СОВСЕМ РЯДОМ';
       title = 'Курьер подъезжает';
-      sub = mins != null && mins > 0 ? `Будет через ~${minText(mins)} — приготовьте код` : 'Будет с минуты на минуту — приготовьте код';
+      sub = mins != null && mins > 0 ? `Будет через ~${minText(mins)}` : 'Будет с минуты на минуту';
       break;
     case 'arrived':
       caption = t.arrivedAt ? `НА МЕСТЕ С ${clock(t.arrivedAt)}` : 'НА МЕСТЕ';
       title = 'Курьер у двери';
-      sub = 'Назовите ему код вручения';
+      sub = 'Сейчас передаст вам заказ';
       bg = colors.cambodia;
       fg = colors.oatMilk;
       icon = 'key';
@@ -361,45 +360,6 @@ function Segment({ state, delay }: { state: 'done' | 'current' | 'todo'; delay: 
   );
 }
 
-/* ───────── Код вручения ───────── */
-
-function CodeCard({ code, urgent }: { code: string; urgent: boolean }) {
-  const copy = async () => {
-    await Clipboard.setStringAsync(code).catch(() => {});
-    hapticSuccess();
-    toast.success('Код скопирован');
-  };
-  return (
-    <Card style={[styles.codeCard, urgent && { borderColor: colors.mango, borderWidth: 2 }]}>
-      {urgent && <Breathe />}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-        <Icon name="key" size={18} color={colors.mango} />
-        <T v="bodyStrong" style={{ flex: 1 }}>
-          Код для курьера
-        </T>
-        <Touchable haptic onPress={copy} style={styles.copy}>
-          <Icon name="copy" size={15} color={colors.mango} />
-          <T v="caption" color={colors.mango} style={{ fontFamily: fonts.extrabold }}>
-            Копировать
-          </T>
-        </Touchable>
-      </View>
-      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: space.sm }}>
-        {code.split('').map((d, i) => (
-          <PopIn key={i} delay={120 + i * 80}>
-            <View style={[styles.codeCell, urgent && { borderColor: colors.mango, backgroundColor: colors.white }]}>
-              <T style={styles.codeDigit}>{d}</T>
-            </View>
-          </PopIn>
-        ))}
-      </View>
-      <T v="small" color={colors.textMuted} center>
-        Назовите код курьеру, когда он передаст заказ. Без кода заказ не будет отмечен доставленным.
-      </T>
-    </Card>
-  );
-}
-
 /** Появление с пружинкой: масштаб 0.6 → 1. */
 function PopIn({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
   const v = useRef(new Animated.Value(0)).current;
@@ -461,7 +421,7 @@ function useStageNotice(t: Tracking | undefined) {
     if (p && p !== t.stage) {
       const msg: Partial<Record<DeliveryStage, string>> = {
         on_way: 'Курьер забрал заказ и едет к вам',
-        arriving: 'Курьер подъезжает — приготовьте код',
+        arriving: 'Курьер подъезжает',
         arrived: 'Курьер на месте',
         delivered: 'Заказ доставлен. Приятного аппетита!',
       };

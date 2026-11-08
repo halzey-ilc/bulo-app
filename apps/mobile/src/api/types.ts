@@ -87,6 +87,8 @@ export interface OrderHistory {
 }
 
 export interface Order {
+  /** Когда отмечена оплата; null — ещё не оплачен */
+  paidAt?: string | null;
   id: string;
   number: number;
   status: OrderStatus;
@@ -203,7 +205,6 @@ export interface Tracking {
   deliveredAt: string | null;
   receivedBy: string | null;
   /** Только владельцу заказа и администратору */
-  deliveryCode?: string | null;
 }
 
 export interface Notification {

@@ -70,13 +70,14 @@ setUnauthorizedHandler(() => {
   void useAuth.getState().signOut();
 });
 
-export type Persona = 'anon' | 'buyer' | 'courier' | 'workshop' | 'admin' | 'manager' | 'accountant';
+export type Persona = 'anon' | 'buyer' | 'courier' | 'workshop' | 'cashier' | 'admin' | 'manager' | 'accountant';
 
 /** Партнёр, гость и клиент — «покупатели»; у каждой офисной роли свой набор вкладок. */
 export function personaOf(role: Role | undefined | null): Persona {
   if (!role) return 'anon';
   if (role === 'COURIER') return 'courier';
   if (role === 'WORKSHOP') return 'workshop';
+  if (role === 'CASHIER') return 'cashier';
   if (role === 'ADMIN') return 'admin';
   if (role === 'MANAGER') return 'manager';
   if (role === 'ACCOUNTANT') return 'accountant';
@@ -91,6 +92,7 @@ export const TABS: Record<Persona, string[]> = {
   buyer: ['index', 'catalog', 'cart', 'orders', 'profile'],
   courier: ['deliveries', 'profile'],
   workshop: ['workshop', 'orders', 'profile'],
+  cashier: ['catalog', 'profile'],
   admin: ['dashboard', 'orders', 'people', 'catalog', 'profile'],
   manager: ['dashboard', 'orders', 'people', 'catalog', 'profile'],
   accountant: ['dashboard', 'payments', 'reports', 'profile'],
@@ -101,6 +103,7 @@ export const HOME_HREF = {
   buyer: '/',
   courier: '/deliveries',
   workshop: '/workshop',
+  cashier: '/catalog',
   admin: '/dashboard',
   manager: '/dashboard',
   accountant: '/dashboard',

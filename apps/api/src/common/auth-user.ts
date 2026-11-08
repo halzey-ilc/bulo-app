@@ -2,7 +2,7 @@ import type { Partner, PartnerStatus, Role, User } from '@prisma/client';
 
 export type AuthUser = User & { partner: Partner | null };
 
-const STAFF: Role[] = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'WORKSHOP', 'COURIER'];
+const STAFF: Role[] = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'WORKSHOP', 'COURIER', 'CASHIER'];
 
 export function isStaff(user?: Pick<User, 'role'> | null): boolean {
   return !!user && STAFF.includes(user.role);

@@ -1,4 +1,3 @@
-import { randomInt } from 'node:crypto';
 import {
   BadRequestException,
   ForbiddenException,
@@ -17,6 +16,7 @@ import { OutboxService } from '../onec/outbox.service';
 import { CreateOrderDto, OrderItemInput, orderInclude, serializeOrder, StatusDto } from './order-dto';
 import {
   allowedTransitions,
+  AWAITING_PRODUCTION,
   canTransition,
   checkDeliveryDate,
   checkMultiplicity,
@@ -30,12 +30,14 @@ export interface OrderFilter {
   dateFrom?: string;
   dateTo?: string;
   search?: string;
+  /** true — только оплаченные, false — только неоплаченные */
+  paid?: boolean;
 }
 
 /** Статусы, в которых курьер видит заказ. */
 const COURIER_STATUSES: OrderStatus[] = ['READY', 'SHIPPED', 'DELIVERED'];
-/** Статусы, в которых цех видит заказ. */
-const WORKSHOP_STATUSES: OrderStatus[] = ['PAID', 'IN_PRODUCTION', 'READY'];
+/** Статусы, в которых цех видит заказ: всё, что ещё не отгружено. */
+const WORKSHOP_STATUSES: OrderStatus[] = [...AWAITING_PRODUCTION, 'IN_PRODUCTION', 'READY'];
 
 @Injectable()
 export class OrdersService {
@@ -120,7 +122,9 @@ export class OrdersService {
       },
       include: orderInclude,
     });
-    await this.notifications.toRoles(['ADMIN', 'MANAGER'], {
+    // Одобрения нет: заказ сразу уходит в 1С и в цех, менеджер только следит
+    await this.outbox.enqueueOrder(order.id, 'CUSTOMER_ORDER');
+    await this.notifications.toRoles(['ADMIN', 'MANAGER', 'WORKSHOP'], {
       title: `Новый заказ №${order.number}`,
       body: `${order.partner.name} — ${total} сом на ${dto.deliveryDate}`,
       orderId: order.id,
@@ -141,6 +145,7 @@ export class OrdersService {
             }
           : undefined,
     };
+    if (f.paid !== undefined) where.paidAt = f.paid ? { not: null } : null;
     if (f.search) {
       const n = Number(f.search);
       where.OR = [
@@ -155,12 +160,7 @@ export class OrdersService {
       orderBy: [{ deliveryDate: 'desc' }, { number: 'desc' }],
       take: 300,
     });
-    return orders.map((o) => this.forUser(user, serializeOrder(o)));
-  }
-
-  /** Код вручения называет получатель — курьеру его не показываем. */
-  private forUser<T extends { deliveryCode: string | null }>(user: AuthUser, o: T): T {
-    return user.role === 'COURIER' ? { ...o, deliveryCode: null } : o;
+    return orders.map(serializeOrder);
   }
 
   private scope(user: AuthUser, where: Prisma.OrderWhereInput): Prisma.OrderWhereInput {
@@ -185,7 +185,7 @@ export class OrdersService {
       include: orderInclude,
     });
     if (!order) throw new NotFoundException('Заказ не найден');
-    return { ...this.forUser(user, serializeOrder(order)), actions: allowedTransitions(order.status, user.role) };
+    return { ...serializeOrder(order), actions: allowedTransitions(order.status, user.role) };
   }
 
   /** Менеджер правит состав заказа по согласованию с клиентом. */
@@ -193,7 +193,7 @@ export class OrdersService {
     const order = await this.prisma.order.findUnique({ where: { id }, include: { items: true } });
     if (!order) throw new NotFoundException('Заказ не найден');
     if (!EDITABLE_STATUSES.includes(order.status)) {
-      throw new BadRequestException('Состав можно менять только до оплаты');
+      throw new BadRequestException('Состав можно менять только до начала производства');
     }
     const { lines, total } = await this.priceItems(order.partnerId, items);
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -238,12 +238,36 @@ export class OrdersService {
     if ((dto.status === 'REJECTED' || (dto.status === 'CANCELLED' && isStaff(user))) && !dto.comment) {
       throw new BadRequestException('Укажите причину');
     }
-    // Курьер вручает заказ только по коду, который назовёт получатель
-    if (dto.status === 'DELIVERED' && user.role === 'COURIER' && order.deliveryCode) {
-      if (!dto.code) throw new BadRequestException('Спросите у получателя код вручения');
-      if (dto.code.trim() !== order.deliveryCode) throw new BadRequestException('Неверный код вручения');
+    return this.transition(order.id, dto.status, user, dto);
+  }
+
+  /** Бухгалтер отмечает оплату. Статус заказа не меняется: цех готовит независимо от оплаты. */
+  async markPaid(user: AuthUser, id: string, paymentMethod?: string, comment?: string) {
+    const order = await this.prisma.order.findUnique({ where: { id } });
+    if (!order) throw new NotFoundException('Заказ не найден');
+    if (order.status === 'REJECTED' || order.status === 'CANCELLED') {
+      throw new BadRequestException('Заказ отменён — оплату отметить нельзя');
     }
-    return this.forUser(user, await this.transition(order.id, dto.status, user, dto));
+    if (order.paidAt) throw new BadRequestException('Оплата уже отмечена');
+    const updated = await this.prisma.order.update({
+      where: { id },
+      data: {
+        paidAt: new Date(),
+        paidById: user.id,
+        paymentMethod: paymentMethod || 'manual',
+        history: {
+          create: { from: order.status, to: order.status, userId: user.id, comment: comment || 'Оплата получена' },
+        },
+      },
+      include: orderInclude,
+    });
+    await this.audit.log(user.id, 'order.paid', 'Order', id, { paymentMethod: paymentMethod ?? null });
+    await this.notifications.toPartner(order.partnerId, {
+      title: `Заказ №${order.number}`,
+      body: 'Оплата получена. Спасибо!',
+      orderId: id,
+    });
+    return serializeOrder(updated);
   }
 
   /**
@@ -254,7 +278,7 @@ export class OrdersService {
     orderId: string,
     to: OrderStatus,
     user: AuthUser,
-    extra: { comment?: string; paymentMethod?: string; productionSheetId?: string; receivedBy?: string } = {},
+    extra: { comment?: string; productionSheetId?: string; receivedBy?: string } = {},
   ) {
     const now = new Date();
     const before = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
@@ -263,17 +287,11 @@ export class OrdersService {
       history: { create: { from: before.status, to, userId: user.id, comment: extra.comment } },
     };
     if (to === 'REJECTED' || to === 'CANCELLED') data.rejectReason = extra.comment;
-    if (to === 'PAID') {
-      data.paidAt = now;
-      data.paidById = user.id;
-      data.paymentMethod = extra.paymentMethod ?? 'manual';
-    }
     if (to === 'IN_PRODUCTION' && extra.productionSheetId) {
       data.productionSheet = { connect: { id: extra.productionSheetId } };
     }
     if (to === 'SHIPPED') {
       data.shippedAt = now;
-      data.deliveryCode = String(randomInt(1000, 10000));
       if (user.role === 'COURIER') data.courier = { connect: { id: user.id } };
     }
     if (to === 'DELIVERED') {
@@ -287,17 +305,9 @@ export class OrdersService {
       comment: extra.comment ?? null,
     });
 
-    if (to === 'APPROVED') await this.outbox.enqueueOrder(orderId, 'CUSTOMER_ORDER');
     if (to === 'SHIPPED') await this.outbox.enqueueOrder(orderId, 'SALE');
 
-    await this.notifyStatus(order.partnerId, order.number, order.id, to, extra.comment, order.deliveryCode);
-    if (to === 'PAID') {
-      await this.notifications.toRoles(['WORKSHOP'], {
-        title: `Заказ №${order.number} оплачен`,
-        body: `${order.partner.name}, доставка ${serializeOrder(order).deliveryDate}`,
-        orderId,
-      });
-    }
+    await this.notifyStatus(order.partnerId, order.number, order.id, to, extra.comment);
     if (to === 'READY') {
       await this.notifications.toRoles(['COURIER'], {
         title: `Заказ №${order.number} готов`,
@@ -314,14 +324,11 @@ export class OrdersService {
     orderId: string,
     to: OrderStatus,
     comment?: string,
-    deliveryCode?: string | null,
   ) {
     const texts: Partial<Record<OrderStatus, string>> = {
-      APPROVED: 'Заказ одобрен и ждёт оплаты',
-      PAID: 'Оплата получена — заказ передаётся в цех',
       IN_PRODUCTION: 'Мы уже готовим ваш заказ',
       READY: 'Заказ готов к отгрузке',
-      SHIPPED: `Курьер уже в пути — следите на карте.${deliveryCode ? ` Код вручения: ${deliveryCode}` : ''}`,
+      SHIPPED: 'Курьер уже в пути — следите на карте',
       DELIVERED: 'Заказ доставлен. Приятного аппетита!',
       REJECTED: `Заказ отклонён${comment ? `: ${comment}` : ''}`,
       CANCELLED: `Заказ отменён${comment ? `: ${comment}` : ''}`,

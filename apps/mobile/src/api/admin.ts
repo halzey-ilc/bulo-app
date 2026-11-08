@@ -34,6 +34,8 @@ export interface PriceType {
   id: string;
   name: string;
   isDefault: boolean;
+  /** Розничные цены: их ведёт кассир */
+  isRetail?: boolean;
   oneCId: string | null;
   _count?: { partners: number };
 }
@@ -303,9 +305,16 @@ export const Admin = {
   onecDocs: (status?: OneCDocStatus) => api.get<OneCDoc[]>(`/admin/onec/documents${qs({ status })}`),
   onecRetry: (id: string) => api.post<OneCDoc>(`/admin/onec/documents/${id}/retry`),
 
-  orders: (q: { status?: OrderStatus[]; dateFrom?: string; dateTo?: string; search?: string; partnerId?: string } = {}) =>
+  orders: (q: { status?: OrderStatus[]; dateFrom?: string; dateTo?: string; search?: string; partnerId?: string; paid?: boolean } = {}) =>
     api.get<OfficeOrder[]>(
-      `/orders${qs({ status: q.status?.join(','), dateFrom: q.dateFrom, dateTo: q.dateTo, search: q.search, partnerId: q.partnerId })}`,
+      `/orders${qs({
+        status: q.status?.join(','),
+        dateFrom: q.dateFrom,
+        dateTo: q.dateTo,
+        search: q.search,
+        partnerId: q.partnerId,
+        paid: q.paid === undefined ? undefined : String(q.paid),
+      })}`,
     ),
   updateItems: (id: string, items: { productId: string; qty: number }[], comment?: string) =>
     api.patch<OfficeOrder>(`/orders/${id}/items`, { items, comment }),

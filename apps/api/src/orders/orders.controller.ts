@@ -3,7 +3,7 @@ import { OrderStatus } from '@prisma/client';
 import { AuthUser } from '../common/auth-user';
 import { CurrentUser, Public, Roles } from '../common/decorators';
 import { SettingsService } from '../common/settings.service';
-import { CreateOrderDto, StatusDto, UpdateItemsDto } from './order-dto';
+import { CreateOrderDto, PaymentDto, StatusDto, UpdateItemsDto } from './order-dto';
 import { earliestDeliveryDate } from './order-rules';
 import { OrdersService } from './orders.service';
 
@@ -34,7 +34,7 @@ export class OrdersController {
 
   /**
    * Список заказов. Партнёр видит свои, сотрудники — по своей роли.
-   * status можно передать через запятую: status=READY,SHIPPED
+   * status можно передать через запятую: status=READY,SHIPPED; paid=true|false — по оплате.
    */
   @Get()
   list(
@@ -44,6 +44,7 @@ export class OrdersController {
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
     @Query('search') search?: string,
+    @Query('paid') paid?: string,
   ) {
     const statuses = status?.split(',').filter(Boolean) as OrderStatus[] | undefined;
     return this.orders.list(user, {
@@ -52,6 +53,7 @@ export class OrdersController {
       dateFrom,
       dateTo,
       search,
+      paid: paid === 'true' ? true : paid === 'false' ? false : undefined,
     });
   }
 
@@ -69,5 +71,12 @@ export class OrdersController {
   @Post(':id/status')
   changeStatus(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: StatusDto) {
     return this.orders.changeStatus(user, id, dto);
+  }
+
+  /** Отметить оплату. Статус заказа не меняется. */
+  @Post(':id/payment')
+  @Roles('ADMIN', 'ACCOUNTANT')
+  markPaid(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: PaymentDto) {
+    return this.orders.markPaid(user, id, dto.paymentMethod, dto.comment);
   }
 }

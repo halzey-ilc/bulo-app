@@ -267,8 +267,12 @@ export class AdminService {
     const [newOrders, awaitingPayment, paid, inProduction, ready, pendingPartners, todayOrders, onecErrors] =
       await Promise.all([
         this.prisma.order.count({ where: { status: 'NEW' } }),
-        this.prisma.order.aggregate({ where: { status: 'APPROVED' }, _count: true, _sum: { total: true } }),
-        this.prisma.order.count({ where: { status: 'PAID' } }),
+        this.prisma.order.aggregate({
+          where: { paidAt: null, status: { notIn: ['REJECTED', 'CANCELLED'] } },
+          _count: true,
+          _sum: { total: true },
+        }),
+        this.prisma.order.count({ where: { paidAt: { not: null }, status: { notIn: ['DELIVERED', 'REJECTED', 'CANCELLED'] } } }),
         this.prisma.order.count({ where: { status: 'IN_PRODUCTION' } }),
         this.prisma.order.count({ where: { status: 'READY' } }),
         this.prisma.partner.count({ where: { status: 'PENDING' } }),

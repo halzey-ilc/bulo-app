@@ -3,17 +3,20 @@ import { addDays, localNow } from '../common/dates';
 
 /**
  * Переходы статусов заказа и кто может их делать.
- * Новый → Одобрен (ждёт оплаты) → Оплачен → В производстве → Готов → Передан курьеру → Доставлен.
+ * Принят → В производстве → Готов → Передан курьеру → Доставлен.
+ * Одобрения менеджера нет: заказ сразу виден цеху, менеджер только следит и может поправить
+ * или отклонить его до начала производства. Оплата отмечается отдельно (paidAt) и статус не меняет.
  * IN_PRODUCTION ставится при формировании сводной накладной (или вручную цехом).
+ * APPROVED и PAID остались только у старых заказов — их можно довести до конца.
  */
 const TRANSITIONS: Record<OrderStatus, Partial<Record<OrderStatus, Role[]>>> = {
   NEW: {
-    APPROVED: ['ADMIN', 'MANAGER'],
+    IN_PRODUCTION: ['ADMIN', 'MANAGER', 'WORKSHOP'],
     REJECTED: ['ADMIN', 'MANAGER'],
     CANCELLED: ['ADMIN', 'MANAGER', 'PARTNER', 'GUEST', 'CLIENT'],
   },
   APPROVED: {
-    PAID: ['ADMIN', 'ACCOUNTANT'],
+    IN_PRODUCTION: ['ADMIN', 'MANAGER', 'WORKSHOP'],
     REJECTED: ['ADMIN', 'MANAGER'],
     CANCELLED: ['ADMIN', 'MANAGER'],
   },
@@ -45,8 +48,11 @@ export function allowedTransitions(from: OrderStatus, role: Role): OrderStatus[]
     .map(([to]) => to);
 }
 
-/** Пока заказ не одобрен/не оплачен, менеджер может править позиции. */
-export const EDITABLE_STATUSES: OrderStatus[] = ['NEW', 'APPROVED'];
+/** Пока цех не начал готовить, менеджер может править позиции. */
+export const EDITABLE_STATUSES: OrderStatus[] = ['NEW', 'APPROVED', 'PAID'];
+
+/** Статусы, которые цех берёт в сводную накладную (новые и старые заказы до производства). */
+export const AWAITING_PRODUCTION: OrderStatus[] = ['NEW', 'APPROVED', 'PAID'];
 
 /**
  * Проверяет дату доставки: не раньше завтрашнего дня, а на завтра — только до времени отсечки.

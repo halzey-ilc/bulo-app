@@ -2,7 +2,7 @@
 
 import { ORDER_FLOW, ORDER_STATUS_LABELS, ROLE_LABELS } from '@bulo/shared';
 import type { OrderStatus } from '@bulo/shared';
-import { ArrowLeft, Check, CircleAlert, Info, Minus, Pencil, Plus, Trash2, Truck, Wallet } from 'lucide-react';
+import { ArrowLeft, Check, CircleAlert, Info, Minus, Pencil, Plus, Trash2, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
@@ -52,9 +52,12 @@ export default function OrderPage() {
   const [payOpen, setPayOpen] = useState(false);
   const [editing, setEditing] = useState(false);
 
-  const canEdit = order && ['NEW', 'APPROVED'].includes(order.status) && ['ADMIN', 'MANAGER'].includes(me.role);
+  const canEdit = order && ['NEW', 'APPROVED', 'PAID'].includes(order.status) && ['ADMIN', 'MANAGER'].includes(me.role);
+  /** Оплата отмечается отдельно от статуса: цех готовит, не дожидаясь её */
+  const canMarkPaid =
+    !!order && !order.paidAt && !['REJECTED', 'CANCELLED'].includes(order.status) && ['ADMIN', 'ACCOUNTANT'].includes(me.role);
 
-  const changeStatus = async (status: OrderStatus, extra: { comment?: string; paymentMethod?: string } = {}) => {
+  const changeStatus = async (status: OrderStatus, extra: { comment?: string } = {}) => {
     setBusy(status);
     try {
       await api.post(`/orders/${id}/status`, { status, ...extra });
@@ -68,9 +71,19 @@ export default function OrderPage() {
     }
   };
 
+  const markPaid = async (paymentMethod: string, comment: string) => {
+    try {
+      await api.post(`/orders/${id}/payment`, { paymentMethod: paymentMethod || undefined, comment: comment || undefined });
+      toast.success('Оплата отмечена');
+      await reload();
+    } catch (e) {
+      toast.error(e);
+      throw e;
+    }
+  };
+
   const onAction = (s: OrderStatus) => {
-    if (s === 'PAID') setPayOpen(true);
-    else if (NEGATIVE.includes(s)) setReasonFor(s);
+    if (NEGATIVE.includes(s)) setReasonFor(s);
     else changeStatus(s).catch(() => {});
   };
 
@@ -104,11 +117,16 @@ export default function OrderPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {positive.map((a) => (
-            <Button key={a} onClick={() => onAction(a)} loading={busy === a} variant={a === 'PAID' ? 'dark' : 'primary'}>
-              {a === 'PAID' ? <Wallet className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+            <Button key={a} onClick={() => onAction(a)} loading={busy === a}>
+              <Check className="h-4 w-4" />
               {ACTION_LABELS[a]}
             </Button>
           ))}
+          {canMarkPaid && (
+            <Button variant="dark" onClick={() => setPayOpen(true)}>
+              <Wallet className="h-4 w-4" /> Отметить оплату
+            </Button>
+          )}
           {negative.map((a) => (
             <Button key={a} variant="danger" onClick={() => onAction(a)}>
               {ACTION_LABELS[a]}
@@ -272,9 +290,6 @@ export default function OrderPage() {
               {order.shippedAt && <Row label="Передан">{fmtDateTime(order.shippedAt)}</Row>}
               {order.deliveredAt && <Row label="Доставлен">{fmtDateTime(order.deliveredAt)}</Row>}
             </dl>
-            <Note tone="blue" icon={<Truck className="h-4 w-4" />} className="mt-4 text-xs">
-              Процесс доставки курьером уточняется.
-            </Note>
           </Card>
           <Card>
             <SectionTitle>Оплата</SectionTitle>
@@ -282,7 +297,7 @@ export default function OrderPage() {
               <Row label="Сумма">
                 <b>{fmtMoney(order.total)}</b>
               </Row>
-              <Row label="Оплачен">{order.paidAt ? fmtDateTime(order.paidAt) : 'нет'}</Row>
+              <Row label="Оплачен">{order.paidAt ? fmtDateTime(order.paidAt) : <span className="font-semibold text-coffee">ещё нет</span>}</Row>
               <Row label="Способ">{order.paymentMethod || '—'}</Row>
             </dl>
             <Note tone="yellow" icon={<Info className="h-4 w-4" />} className="mt-4 text-xs">
@@ -297,7 +312,7 @@ export default function OrderPage() {
         order={order}
         onClose={() => setPayOpen(false)}
         onConfirm={async (paymentMethod, comment) => {
-          await changeStatus('PAID', { paymentMethod: paymentMethod || undefined, comment: comment || undefined });
+          await markPaid(paymentMethod, comment);
           setPayOpen(false);
         }}
       />

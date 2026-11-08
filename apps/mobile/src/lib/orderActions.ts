@@ -7,7 +7,7 @@ import { confirmDialog, toast } from '../store/ui';
  * REJECTED — обязательная причина, PAID — необязательный способ оплаты, CANCELLED — подтверждение.
  */
 export function runOrderAction(order: Pick<Order, 'id' | 'number'>, status: OrderStatus, done: (o: Order) => void) {
-  const apply = async (extra: { comment?: string; paymentMethod?: string } = {}) => {
+  const apply = async (extra: { comment?: string } = {}) => {
     const updated = await Orders.setStatus(order.id, status, extra);
     toast.success(`Заказ №${order.number}: ${ORDER_STATUS_LABELS[status].toLowerCase()}`);
     done(updated);
@@ -34,15 +34,7 @@ export function runOrderAction(order: Pick<Order, 'id' | 'number'>, status: Orde
       onConfirm: (comment) => apply({ comment: comment || undefined }),
     });
   }
-  if (status === 'PAID') {
-    return confirmDialog({
-      title: `Отметить оплату №${order.number}`,
-      message: 'Укажите способ оплаты, если знаете.',
-      input: { placeholder: 'Наличные, перевод, QR…' },
-      confirmText: 'Оплачен',
-      onConfirm: (paymentMethod) => apply({ paymentMethod: paymentMethod || undefined }),
-    });
-  }
+  if (status === 'PAID') return runMarkPaid(order, done);
   if (status === 'DELIVERED' || status === 'SHIPPED') {
     return confirmDialog({
       title: status === 'SHIPPED' ? `Забрали заказ №${order.number}?` : `Заказ №${order.number} доставлен?`,
@@ -51,6 +43,21 @@ export function runOrderAction(order: Pick<Order, 'id' | 'number'>, status: Orde
     });
   }
   apply().catch((e) => toast.error(errorMessage(e)));
+}
+
+/** Отметка оплаты: статус заказа не меняется, только появляется дата оплаты. */
+export function runMarkPaid(order: Pick<Order, 'id' | 'number'>, done: (o: Order) => void) {
+  return confirmDialog({
+    title: `Отметить оплату №${order.number}`,
+    message: 'Укажите способ оплаты, если знаете.',
+    input: { placeholder: 'Наличные, перевод, QR…' },
+    confirmText: 'Оплачен',
+    onConfirm: async (paymentMethod) => {
+      const updated = await Orders.markPaid(order.id, { paymentMethod: paymentMethod || undefined });
+      toast.success(`Заказ №${order.number}: оплата отмечена`);
+      done(updated);
+    },
+  });
 }
 
 export function actionKind(s: OrderStatus): 'primary' | 'danger' | 'ghost' | 'dark' {

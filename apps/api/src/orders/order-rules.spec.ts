@@ -41,14 +41,25 @@ describe('checkMultiplicity', () => {
 });
 
 describe('переходы статусов', () => {
-  it('оплату отмечает бухгалтер, а не партнёр', () => {
-    expect(canTransition('APPROVED', 'PAID', 'ACCOUNTANT')).toBe(true);
-    expect(canTransition('APPROVED', 'PAID', 'PARTNER')).toBe(false);
+  it('новый заказ сразу идёт в цех, без одобрения и оплаты', () => {
+    expect(canTransition('NEW', 'IN_PRODUCTION', 'WORKSHOP')).toBe(true);
+    expect(canTransition('NEW', 'APPROVED', 'MANAGER')).toBe(false);
+    expect(canTransition('NEW', 'PAID', 'ACCOUNTANT')).toBe(false);
+  });
+
+  it('менеджер может отклонить новый заказ, кассир — нет', () => {
+    expect(canTransition('NEW', 'REJECTED', 'MANAGER')).toBe(true);
+    expect(canTransition('NEW', 'REJECTED', 'CASHIER')).toBe(false);
+  });
+
+  it('старые одобренные и оплаченные заказы можно довести до цеха', () => {
+    expect(canTransition('APPROVED', 'IN_PRODUCTION', 'WORKSHOP')).toBe(true);
+    expect(canTransition('PAID', 'IN_PRODUCTION', 'WORKSHOP')).toBe(true);
   });
 
   it('курьер забирает только готовые заказы', () => {
     expect(canTransition('READY', 'SHIPPED', 'COURIER')).toBe(true);
-    expect(canTransition('PAID', 'SHIPPED', 'COURIER')).toBe(false);
+    expect(canTransition('NEW', 'SHIPPED', 'COURIER')).toBe(false);
   });
 
   it('партнёр может отменить только новый заказ', () => {

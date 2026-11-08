@@ -37,8 +37,10 @@ export function PaymentsView() {
   }, [params.tab]);
 
   const [query, setQuery] = useState('');
-  const queue = useLoad(() => Admin.orders({ status: ['APPROVED'] }), []);
-  const paid = useLoad(() => Admin.orders({ status: ['PAID', 'IN_PRODUCTION', 'READY', 'SHIPPED', 'DELIVERED'], dateFrom: addDaysIso(todayIso(), -30) }), []);
+  // оплата не зависит от статуса: в очереди все неотменённые заказы без отметки оплаты
+  const open = ['NEW', 'APPROVED', 'PAID', 'IN_PRODUCTION', 'READY', 'SHIPPED', 'DELIVERED'] as const;
+  const queue = useLoad(() => Admin.orders({ status: [...open], paid: false }), []);
+  const paid = useLoad(() => Admin.orders({ status: [...open], paid: true, dateFrom: addDaysIso(todayIso(), -30) }), []);
   useAutoRefresh(() => {
     queue.reload();
     paid.reload();
@@ -58,7 +60,7 @@ export function PaymentsView() {
       clearTimeout(p.timer);
       setUndo((u) => (u?.order.id === id ? null : u));
       try {
-        await Orders.setStatus(id, 'PAID', { paymentMethod: p.method });
+        await Orders.markPaid(id, { paymentMethod: p.method });
         paid.reload();
         queue.reload();
       } catch (e) {

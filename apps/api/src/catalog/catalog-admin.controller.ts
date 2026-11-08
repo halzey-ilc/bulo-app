@@ -4,6 +4,7 @@ import { extname, join } from 'node:path';
 import {
   BadRequestException,
   Body,
+  ForbiddenException,
   Controller,
   Delete,
   Get,
@@ -86,11 +87,13 @@ class PricesDto {
 class PriceTypeDto {
   @IsString() @MinLength(1) name: string;
   @IsOptional() @IsBoolean() isDefault?: boolean;
+  @IsOptional() @IsBoolean() isRetail?: boolean;
 }
 
 class UpdatePriceTypeDto {
   @IsOptional() @IsString() @MinLength(1) name?: string;
   @IsOptional() @IsBoolean() isDefault?: boolean;
+  @IsOptional() @IsBoolean() isRetail?: boolean;
 }
 
 const UPLOAD_DIR = join(process.cwd(), 'uploads');
@@ -108,6 +111,9 @@ const photoUpload = FileInterceptor('file', {
 
 const publicUrl = (file: string) => `${process.env.PUBLIC_URL ?? ''}/uploads/${file}`;
 
+/** Кассир добавляет и убирает товары, ставит фото и розничные цены. Партнёрские цены и категории ему недоступны. */
+const CATALOG_STAFF = ['ADMIN', 'MANAGER', 'CASHIER'] as const;
+
 /** Управление каталогом: категории, товары, фото, цены, видимость. */
 @Controller('admin/catalog')
 @Roles('ADMIN', 'MANAGER')
@@ -119,6 +125,7 @@ export class CatalogAdminController {
   ) {}
 
   @Get('categories')
+  @Roles(...CATALOG_STAFF)
   categories() {
     return this.catalog.categories(true);
   }
@@ -142,6 +149,7 @@ export class CatalogAdminController {
   }
 
   @Get('products')
+  @Roles(...CATALOG_STAFF)
   async products() {
     const items = await this.prisma.product.findMany({
       include: { category: true, prices: { include: { priceType: true } } },
@@ -155,6 +163,7 @@ export class CatalogAdminController {
   }
 
   @Post('products')
+  @Roles(...CATALOG_STAFF)
   async createProduct(@CurrentUser() user: AuthUser, @Body() dto: CreateProductDto) {
     const p = await this.prisma.product.create({ data: dto });
     await this.audit.log(user.id, 'product.create', 'Product', p.id);
@@ -162,21 +171,54 @@ export class CatalogAdminController {
   }
 
   @Patch('products/:id')
+  @Roles(...CATALOG_STAFF)
   async updateProduct(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ProductDto) {
+    // кассир у существующих товаров только включает и выключает наличие
+    // (у DTO объявленные, но не переданные поля тоже есть как ключи со значением undefined)
+    const sent = Object.entries(dto).filter(([, v]) => v !== undefined).map(([k]) => k);
+    if (user.role === 'CASHIER' && sent.some((k) => k !== 'visible')) {
+      throw new ForbiddenException('Кассир может только убрать товар или вернуть его в продажу');
+    }
     const p = await this.prisma.product.update({ where: { id }, data: dto });
     await this.audit.log(user.id, 'product.update', 'Product', id, dto as object);
     return p;
   }
 
   @Post('products/:id/photo')
+  @Roles(...CATALOG_STAFF)
   @UseInterceptors(photoUpload)
-  async uploadPhoto(@Param('id') id: string, @UploadedFile() file?: Express.Multer.File) {
+  async uploadPhoto(@CurrentUser() user: AuthUser, @Param('id') id: string, @UploadedFile() file?: Express.Multer.File) {
     if (!file) throw new BadRequestException('Загрузите изображение JPG, PNG или WebP до 8 МБ');
-    return this.prisma.product.update({ where: { id }, data: { photoUrl: publicUrl(file.filename) } });
+    const p = await this.prisma.product.update({ where: { id }, data: { photoUrl: publicUrl(file.filename) } });
+    await this.audit.log(user.id, 'product.photo', 'Product', id);
+    return p;
+  }
+
+  /** Удалить товар. Если его уже заказывали, товар только скрывается, чтобы не ломать историю заказов. */
+  @Delete('products/:id')
+  @Roles(...CATALOG_STAFF)
+  async deleteProduct(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    const used = await this.prisma.orderItem.count({ where: { productId: id } });
+    if (used) {
+      await this.prisma.product.update({ where: { id }, data: { visible: false } });
+      await this.audit.log(user.id, 'product.hide', 'Product', id);
+      return { ok: true, hidden: true };
+    }
+    await this.prisma.product.delete({ where: { id } });
+    await this.audit.log(user.id, 'product.delete', 'Product', id);
+    return { ok: true, hidden: false };
   }
 
   @Put('products/:id/prices')
+  @Roles(...CATALOG_STAFF)
   async setPrices(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: PricesDto) {
+    if (user.role === 'CASHIER') {
+      const retail = await this.prisma.priceType.findMany({ where: { isRetail: true }, select: { id: true } });
+      const allowed = new Set(retail.map((t) => t.id));
+      if (dto.items.some((i) => !allowed.has(i.priceTypeId))) {
+        throw new ForbiddenException('Кассир меняет только розничные цены');
+      }
+    }
     await this.prisma.$transaction(
       dto.items.map((i) =>
         i.price == null
@@ -193,6 +235,7 @@ export class CatalogAdminController {
   }
 
   @Get('price-types')
+  @Roles(...CATALOG_STAFF)
   priceTypes() {
     return this.prisma.priceType.findMany({
       orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],

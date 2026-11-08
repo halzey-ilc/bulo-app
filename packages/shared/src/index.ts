@@ -6,6 +6,7 @@ export const ROLES = [
   'ACCOUNTANT',
   'WORKSHOP',
   'COURIER',
+  'CASHIER',
   'PARTNER',
   'GUEST',
   'CLIENT',
@@ -18,13 +19,14 @@ export const ROLE_LABELS: Record<Role, string> = {
   ACCOUNTANT: 'Бухгалтер',
   WORKSHOP: 'Цех',
   COURIER: 'Курьер',
+  CASHIER: 'Кассир',
   PARTNER: 'Партнёр',
   GUEST: 'Гость',
   CLIENT: 'Клиент',
 };
 
 /** Роли сотрудников, которых админ создаёт приглашением. */
-export const STAFF_ROLES: Role[] = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'WORKSHOP', 'COURIER'];
+export const STAFF_ROLES: Role[] = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'WORKSHOP', 'COURIER', 'CASHIER'];
 
 export const ORDER_STATUSES = [
   'NEW',
@@ -40,8 +42,8 @@ export const ORDER_STATUSES = [
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  NEW: 'Новый',
-  APPROVED: 'Одобрен, ждёт оплаты',
+  NEW: 'Принят',
+  APPROVED: 'Одобрен',
   PAID: 'Оплачен',
   IN_PRODUCTION: 'В производстве',
   READY: 'Готов к отгрузке',
@@ -54,8 +56,6 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
 /** Основной путь заказа — для шкалы статусов в приложении. */
 export const ORDER_FLOW: OrderStatus[] = [
   'NEW',
-  'APPROVED',
-  'PAID',
   'IN_PRODUCTION',
   'READY',
   'SHIPPED',

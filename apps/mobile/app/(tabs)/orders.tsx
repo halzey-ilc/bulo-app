@@ -31,23 +31,21 @@ const BUYER_FILTERS: Filter[] = [
 ];
 
 const OFFICE_FILTERS: Filter[] = [
-  { key: 'new', label: 'Новые', statuses: ['NEW'] },
-  { key: 'approved', label: 'Ждут оплаты', statuses: ['APPROVED'] },
-  { key: 'paid', label: 'Оплачены', statuses: ['PAID'] },
+  { key: 'new', label: 'Новые', statuses: ['NEW', 'APPROVED', 'PAID'] },
   { key: 'work', label: 'В работе', statuses: ['IN_PRODUCTION', 'READY', 'SHIPPED'] },
   { key: 'all', label: 'Все' },
 ];
 
 const WORKSHOP_FILTERS: Filter[] = [
+  { key: 'new', label: 'Новые', statuses: ['NEW', 'APPROVED', 'PAID'] },
   { key: 'prod', label: 'В производстве', statuses: ['IN_PRODUCTION'] },
-  { key: 'paid', label: 'Оплачены', statuses: ['PAID'] },
   { key: 'ready', label: 'Готовы', statuses: ['READY'] },
 ];
 
 function defaultFilter(role: Role | undefined, persona: string) {
   if (persona === 'buyer') return 'all';
-  if (persona === 'workshop') return 'prod';
-  if (role === 'ACCOUNTANT') return 'approved';
+  if (persona === 'workshop') return 'new';
+  if (role === 'ACCOUNTANT') return 'new';
   return 'new';
 }
 
@@ -81,7 +79,7 @@ function OrdersScreen() {
         <View style={styles.hint}>
           <Icon name="info" size={18} color={colors.blueberry} />
           <T v="small" color={colors.blueberry} style={{ flex: 1, fontFamily: fonts.semibold }}>
-            Здесь — одобрение, отклонение и отметка оплаты. Редактирование, отчёты и справочники — в веб-панели BULO.
+            Здесь — контроль заказов, отклонение и отметка оплаты. Редактирование, отчёты и справочники — в веб-панели BULO.
           </T>
         </View>
       )}

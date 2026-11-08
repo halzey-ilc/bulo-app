@@ -14,7 +14,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 
-const ROLES = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'WORKSHOP', 'COURIER', 'PARTNER', 'GUEST', 'CLIENT'] as const;
+const ROLES = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'WORKSHOP', 'COURIER', 'CASHIER', 'PARTNER', 'GUEST', 'CLIENT'] as const;
 type AssignableRole = (typeof ROLES)[number];
 
 export class PartnerDto {

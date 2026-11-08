@@ -8,6 +8,7 @@ export type Role =
   | 'ACCOUNTANT'
   | 'WORKSHOP'
   | 'COURIER'
+  | 'CASHIER'
   | 'PARTNER'
   | 'GUEST'
   | 'CLIENT';
@@ -18,12 +19,13 @@ export const ROLE_LABELS: Record<Role, string> = {
   ACCOUNTANT: 'Бухгалтер',
   WORKSHOP: 'Цех',
   COURIER: 'Курьер',
+  CASHIER: 'Кассир',
   PARTNER: 'Партнёр',
   GUEST: 'Гость',
   CLIENT: 'Клиент',
 };
 
-export const STAFF_ROLES: Role[] = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'WORKSHOP', 'COURIER'];
+export const STAFF_ROLES: Role[] = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'WORKSHOP', 'COURIER', 'CASHIER'];
 /** Офисные роли: в приложении у них облегчённый вид, основная работа — в веб-панели. */
 export const OFFICE_ROLES: Role[] = ['ADMIN', 'MANAGER', 'ACCOUNTANT'];
 
@@ -39,8 +41,8 @@ export type OrderStatus =
   | 'CANCELLED';
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  NEW: 'Новый',
-  APPROVED: 'Одобрен, ждёт оплаты',
+  NEW: 'Принят',
+  APPROVED: 'Одобрен',
   PAID: 'Оплачен',
   IN_PRODUCTION: 'В производстве',
   READY: 'Готов к отгрузке',
@@ -52,13 +54,16 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
 
 export const ORDER_FLOW: OrderStatus[] = [
   'NEW',
-  'APPROVED',
-  'PAID',
   'IN_PRODUCTION',
   'READY',
   'SHIPPED',
   'DELIVERED',
 ];
+
+/** Оплата отмечается отдельно от статуса: заказ готовят, не дожидаясь её. */
+export function canMarkPaid(order: { status: OrderStatus; paidAt?: string | null }, role?: Role | null): boolean {
+  return (role === 'ADMIN' || role === 'ACCOUNTANT') && !order.paidAt && order.status !== 'REJECTED' && order.status !== 'CANCELLED';
+}
 
 /** Подписи кнопок для переходов статуса. */
 export const ACTION_LABELS: Partial<Record<OrderStatus, string>> = {
@@ -79,12 +84,12 @@ export const ACTION_LABELS: Partial<Record<OrderStatus, string>> = {
  */
 const TRANSITIONS: Record<OrderStatus, Partial<Record<OrderStatus, Role[]>>> = {
   NEW: {
-    APPROVED: ['ADMIN', 'MANAGER'],
+    IN_PRODUCTION: ['ADMIN', 'MANAGER', 'WORKSHOP'],
     REJECTED: ['ADMIN', 'MANAGER'],
-    CANCELLED: ['ADMIN', 'MANAGER', 'PARTNER', 'GUEST'],
+    CANCELLED: ['ADMIN', 'MANAGER', 'PARTNER', 'GUEST', 'CLIENT'],
   },
   APPROVED: {
-    PAID: ['ADMIN', 'ACCOUNTANT'],
+    IN_PRODUCTION: ['ADMIN', 'MANAGER', 'WORKSHOP'],
     REJECTED: ['ADMIN', 'MANAGER'],
     CANCELLED: ['ADMIN', 'MANAGER'],
   },

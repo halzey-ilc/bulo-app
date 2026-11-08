@@ -11,6 +11,7 @@ import { BottomBar, Header, Screen } from '../../../src/components/layout';
 import { ProductImage } from '../../../src/components/product';
 import { Button, ErrorState, Field, Skeleton, T, Touchable } from '../../../src/components/ui';
 import { useLoad } from '../../../src/lib/useLoad';
+import { useAuth } from '../../../src/store/auth';
 import { toast } from '../../../src/store/ui';
 import { colors, fonts, radius, shadows, space } from '../../../src/theme';
 
@@ -36,6 +37,8 @@ const num = (s: string) => {
 /** Карточка товара для офиса: фото, описание, кратность, цены по типам. */
 export default function ProductEditor() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  /** Кассир: только наличие, фото и розничная цена */
+  const cashier = useAuth((s) => s.user?.role) === 'CASHIER';
   const products = useLoad(() => Admin.products(), []);
   const types = useLoad(() => Admin.priceTypes(), []);
   const p = products.data?.find((x) => x.id === id);
@@ -131,7 +134,9 @@ export default function ProductEditor() {
     }
     setBusy(true);
     try {
-      if (formDirty) {
+      if (formDirty && cashier) {
+        await Admin.updateProduct(p.id, { visible: form.visible });
+      } else if (formDirty) {
         await Admin.updateProduct(p.id, {
           name: form.name.trim(),
           description: form.description.trim(),
@@ -196,16 +201,16 @@ export default function ProductEditor() {
         </T>
 
         <Group>
-          <ToggleRow icon="eye" title="Показывать в каталоге" subtitle={form.visible ? 'Партнёры видят и заказывают' : 'Скрыт от партнёров'} value={form.visible} onChange={(v) => set('visible', v)} />
-          <ToggleRow icon="sparkle" title="Новинка" subtitle="Плашка NEW и подборка на главной" value={form.isNew} onChange={(v) => set('isNew', v)} />
+          <ToggleRow icon="eye" title="В продаже" subtitle={form.visible ? 'Товар есть, его видят и заказывают' : 'Убран из каталога'} value={form.visible} onChange={(v) => set('visible', v)} />
+          {!cashier && <ToggleRow icon="sparkle" title="Новинка" subtitle="Плашка NEW и подборка на главной" value={form.isNew} onChange={(v) => set('isNew', v)} />}
         </Group>
 
-        <Label>Цены, сом</Label>
+        <Label>{cashier ? 'Розничная цена, сом' : 'Цены, сом'}</Label>
         <Group>
           {types.loading ? (
             <Skeleton style={{ height: 120 }} />
           ) : (
-            (types.data ?? []).map((t) => (
+            (types.data ?? []).filter((t) => !cashier || t.isRetail).map((t) => (
               <View key={t.id} style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
                 <View style={{ flex: 1 }}>
                   <T v="bodyStrong">{t.name}</T>
@@ -220,10 +225,11 @@ export default function ProductEditor() {
               </View>
             ))
           )}
-          <Note text="Пустое поле — у этого типа цен товара не будет, такие партнёры не смогут его заказать." />
+          <Note text={cashier ? 'Розничную цену видят покупатели. Партнёрские цены меняет администратор.' : 'Пустое поле — у этого типа цен товара не будет, такие партнёры не смогут его заказать.'} />
         </Group>
 
-        <Label>Описание</Label>
+        {!cashier && <Label>Описание</Label>}
+        {!cashier && (
         <Group>
           <Field label="Название" value={form.name} onChangeText={(v) => set('name', v)} />
           <Field label="Описание" multiline value={form.description} onChangeText={(v) => set('description', v)} placeholder="Пара тёплых слов о вкусе" />
@@ -245,6 +251,7 @@ export default function ProductEditor() {
             </View>
           </View>
         </Group>
+        )}
       </Screen>
 
       {dirty && (

@@ -222,8 +222,6 @@ export class DeliveryService {
       arrivedAt: o.arrivedAt,
       deliveredAt: o.deliveredAt,
       receivedBy: o.receivedBy,
-      // код вручения видит только получатель и офис — не курьер
-      deliveryCode: owner || ['ADMIN', 'MANAGER'].includes(user.role) ? o.deliveryCode : null,
     };
   }
 
@@ -237,7 +235,7 @@ export class DeliveryService {
     await this.audit.log(user.id, 'order.arrived', 'Order', orderId);
     await this.notifications.toPartner(o.partnerId, {
       title: `Заказ №${o.number}`,
-      body: 'Курьер на месте. Назовите ему код вручения',
+      body: 'Курьер на месте и скоро передаст заказ',
       orderId,
     });
     return { arrivedAt: updated.arrivedAt };

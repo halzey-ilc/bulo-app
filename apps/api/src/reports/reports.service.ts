@@ -5,8 +5,8 @@ import { fromDbDate, isIsoDate, toDbDate } from '../common/dates';
 import { ExcelService } from '../common/excel.service';
 import { PrismaService } from '../common/prisma.service';
 
-/** Продажей считаем всё, что одобрено и не отменено. */
-const SOLD: OrderStatus[] = ['APPROVED', 'PAID', 'IN_PRODUCTION', 'READY', 'SHIPPED', 'DELIVERED'];
+/** Продажей считаем всё, что принято и не отменено. */
+const SOLD: OrderStatus[] = ['NEW', 'APPROVED', 'PAID', 'IN_PRODUCTION', 'READY', 'SHIPPED', 'DELIVERED'];
 
 @Injectable()
 export class ReportsService {
@@ -72,10 +72,10 @@ export class ReportsService {
     };
   }
 
-  /** Кто должен: одобренные, но не оплаченные заказы. */
+  /** Кто должен: принятые, но не оплаченные заказы. */
   async debts() {
     const orders = await this.prisma.order.findMany({
-      where: { status: 'APPROVED', paidAt: null },
+      where: { status: { notIn: ['REJECTED', 'CANCELLED'] }, paidAt: null },
       include: { partner: true },
       orderBy: { deliveryDate: 'asc' },
     });

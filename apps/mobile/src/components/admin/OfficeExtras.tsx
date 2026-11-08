@@ -10,7 +10,7 @@ import { ActionItem } from './kit';
 export function OfficeOrderTools({ order }: { order: Order }) {
   const persona = usePersona();
   const manage = persona === 'admin' || persona === 'manager';
-  const editable = manage && (order.status === 'NEW' || order.status === 'APPROVED');
+  const editable = manage && (order.status === 'NEW' || order.status === 'APPROVED' || order.status === 'PAID');
   if (!manage) return null;
   return (
     <View style={{ gap: space.sm }}>

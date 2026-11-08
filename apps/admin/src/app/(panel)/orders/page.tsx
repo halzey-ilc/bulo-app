@@ -17,13 +17,13 @@ import type { Order, Partner } from '@/lib/types';
 
 /** Статусы, которые видит роль (по правилам API) */
 const ROLE_STATUSES: Partial<Record<Role, OrderStatus[]>> = {
-  WORKSHOP: ['PAID', 'IN_PRODUCTION', 'READY'],
+  WORKSHOP: ['NEW', 'APPROVED', 'PAID', 'IN_PRODUCTION', 'READY'],
   COURIER: ['READY', 'SHIPPED', 'DELIVERED'],
 };
 
 /** Быстрые действия прямо в списке для цеха и курьера */
 const QUICK: Partial<Record<Role, Partial<Record<OrderStatus, OrderStatus>>>> = {
-  WORKSHOP: { IN_PRODUCTION: 'READY' },
+  WORKSHOP: { NEW: 'IN_PRODUCTION', IN_PRODUCTION: 'READY' },
   COURIER: { READY: 'SHIPPED', SHIPPED: 'DELIVERED' },
 };
 
@@ -38,6 +38,7 @@ function OrdersInner() {
   const dateFrom = sp.get('dateFrom') ?? '';
   const dateTo = sp.get('dateTo') ?? '';
   const partnerId = sp.get('partnerId') ?? '';
+  const paid = sp.get('paid') ?? '';
   const [search, setSearch] = useState(sp.get('search') ?? '');
   const debounced = useDebounced(search, 350);
 
@@ -61,8 +62,9 @@ function OrdersInner() {
         dateTo,
         partnerId,
         search: debounced.trim() || undefined,
+        paid: paid || undefined,
       }),
-    [statuses.join(','), dateFrom, dateTo, partnerId, debounced],
+    [statuses.join(','), dateFrom, dateTo, partnerId, debounced, paid],
   );
   const partners = useLoad(
     () => (canSeePartners ? api.get<Partner[]>('/admin/partners', { status: 'APPROVED' }) : Promise.resolve([])),

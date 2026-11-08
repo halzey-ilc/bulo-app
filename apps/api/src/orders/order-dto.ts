@@ -57,8 +57,8 @@ export class UpdateItemsDto {
 }
 
 export class StatusDto {
-  @IsIn(['APPROVED', 'PAID', 'IN_PRODUCTION', 'READY', 'SHIPPED', 'DELIVERED', 'REJECTED', 'CANCELLED'])
-  status: 'APPROVED' | 'PAID' | 'IN_PRODUCTION' | 'READY' | 'SHIPPED' | 'DELIVERED' | 'REJECTED' | 'CANCELLED';
+  @IsIn(['IN_PRODUCTION', 'READY', 'SHIPPED', 'DELIVERED', 'REJECTED', 'CANCELLED'])
+  status: 'IN_PRODUCTION' | 'READY' | 'SHIPPED' | 'DELIVERED' | 'REJECTED' | 'CANCELLED';
 
   /** Причина отклонения/отмены или комментарий к смене статуса */
   @IsOptional()
@@ -66,23 +66,24 @@ export class StatusDto {
   @MaxLength(500)
   comment?: string;
 
-  /** Для PAID: способ оплаты (пока свободный текст — способ ещё выбирается) */
-  @IsOptional()
-  @IsString()
-  @MaxLength(60)
-  paymentMethod?: string;
-
-  /** Для DELIVERED курьером: код вручения, который назвал получатель */
-  @IsOptional()
-  @IsString()
-  @MaxLength(10)
-  code?: string;
-
   /** Для DELIVERED: кто принял заказ */
   @IsOptional()
   @IsString()
   @MaxLength(80)
   receivedBy?: string;
+}
+
+export class PaymentDto {
+  /** Способ оплаты: пока свободный текст, способ ещё выбирается */
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  paymentMethod?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  comment?: string;
 }
 
 export const orderInclude = {

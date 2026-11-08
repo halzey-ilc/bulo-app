@@ -13,6 +13,8 @@ enum Role {
   ACCOUNTANT
   WORKSHOP
   COURIER
+  /// Кассир: добавляет и убирает товары, ставит фото и розничные цены
+  CASHIER
   PARTNER
   GUEST
   CLIENT
@@ -173,6 +175,8 @@ model PriceType {
   id        String    @id @default(cuid())
   name      String
   isDefault Boolean   @default(false)
+  /// Розничные цены для покупателей. Их ведёт кассир, партнёрские — только админ и менеджер.
+  isRetail  Boolean   @default(false)
   oneCId    String?   @unique
   prices    Price[]
   partners  Partner[]
@@ -216,7 +220,7 @@ model Order {
   deliveryLat     Float?
   deliveryLng     Float?
   deliveryEntrance String?
-  /// Код вручения: партнёр называет его курьеру при получении
+  /// Код вручения. Больше не используется: курьер вручает заказ без кода. Поле оставлено для старых заказов.
   deliveryCode    String?
   /// Курьер на месте (у двери)
   arrivedAt       DateTime?

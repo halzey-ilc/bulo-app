@@ -5,11 +5,11 @@
  *
  *   node scripts/courier-simulator.mjs --prepare   — создать заказ партнёра и довести его до «Готов к отгрузке»
  *   node scripts/courier-simulator.mjs             — забрать готовые заказы и поехать по маршруту
- *   node scripts/courier-simulator.mjs --deliver   — в конце вручить заказы (код берётся у администратора)
+ *   node scripts/courier-simulator.mjs --deliver   — в конце вручить заказы
  *   --speed=N — во сколько раз быстрее реального времени (по умолчанию 8)
  *
  * Переменные: BULO_API (по умолчанию http://localhost:4000/api),
- * ADMIN_PASSWORD (нужен для --prepare и --deliver).
+ * ADMIN_PASSWORD (нужен для --prepare).
  */
 const API = process.env.BULO_API ?? 'http://localhost:4000/api';
 const args = process.argv.slice(2);
@@ -34,7 +34,7 @@ async function call(method, path, { token, body } = {}) {
 const login = async (l, p = DEMO_PASSWORD) => (await call('POST', '/auth/login', { body: { login: l, password: p } })).token;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Демо-заказ партнёра, проведённый через одобрение, оплату и цех до «Готов к отгрузке». */
+/** Демо-заказ партнёра, проведённый через цех до «Готов к отгрузке». */
 async function prepare() {
   const partner = await login('partner');
   const products = await call('GET', '/catalog/products', { token: partner });
@@ -46,8 +46,6 @@ async function prepare() {
     body: { deliveryDate: rules.earliestDeliveryDate, items: [{ productId: p.id, qty }], comment: 'Демо-доставка' },
   });
   const admin = await login('admin', adminPassword());
-  await call('POST', `/orders/${order.id}/status`, { token: admin, body: { status: 'APPROVED' } });
-  await call('POST', `/orders/${order.id}/status`, { token: admin, body: { status: 'PAID', paymentMethod: 'демо' } });
   await call('POST', `/orders/${order.id}/status`, { token: admin, body: { status: 'IN_PRODUCTION' } });
   await call('POST', `/orders/${order.id}/status`, { token: admin, body: { status: 'READY' } });
   console.log(`Заказ №${order.number} готов к отгрузке: ${p.name} × ${qty}, ${order.deliveryAddress}`);
@@ -108,14 +106,12 @@ async function drive() {
       await call('POST', `/courier/orders/${s.orderId}/arrived`, { token: courier });
       console.log(`На месте: заказ №${s.number}, ${s.address}`);
       if (has('--deliver')) {
-        const admin = await login('admin', adminPassword());
-        const t = await call('GET', `/orders/${s.orderId}/tracking`, { token: admin });
         await sleep(tick * 3);
         await call('POST', `/orders/${s.orderId}/status`, {
           token: courier,
-          body: { status: 'DELIVERED', code: t.deliveryCode, receivedBy: s.partner.contactName },
+          body: { status: 'DELIVERED', receivedBy: s.partner.contactName },
         });
-        console.log(`Вручил заказ №${s.number} по коду ${t.deliveryCode}`);
+        console.log(`Вручил заказ №${s.number}`);
       }
       next++;
     }

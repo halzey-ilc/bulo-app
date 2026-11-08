@@ -4,7 +4,7 @@ import type { OrderStatus } from '@bulo/shared';
 export const ACTION_LABELS: Record<OrderStatus, string> = {
   NEW: 'Новый',
   APPROVED: 'Одобрить',
-  PAID: 'Отметить оплату',
+  PAID: 'Оплачен',
   IN_PRODUCTION: 'В производство',
   READY: 'Готов к отгрузке',
   SHIPPED: 'Передан курьеру',

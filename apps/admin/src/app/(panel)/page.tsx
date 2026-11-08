@@ -37,20 +37,20 @@ export default function DashboardPage() {
           href: '/orders?status=NEW',
           label: 'Новые заказы',
           value: data.newOrders,
-          hint: 'ждут одобрения',
+          hint: 'ещё не в цехе',
           icon: Sparkles,
           tone: 'bg-ice',
           accent: data.newOrders > 0,
         },
         {
-          href: '/orders?status=APPROVED',
-          label: 'Ждут оплаты',
+          href: '/orders?paid=false',
+          label: 'Не оплачены',
           value: data.awaitingPayment.count,
           hint: fmtMoney(data.awaitingPayment.total),
           icon: Wallet,
           tone: 'bg-butter',
         },
-        { href: '/orders?status=PAID', label: 'Оплачены', value: data.paid, hint: 'можно в производство', icon: ClipboardCheck, tone: 'bg-cambodia-soft' },
+        { href: '/orders?paid=true', label: 'Оплачены', value: data.paid, hint: 'ещё не доставлены', icon: ClipboardCheck, tone: 'bg-cambodia-soft' },
         { href: '/orders?status=IN_PRODUCTION', label: 'В производстве', value: data.inProduction, hint: 'в цехе', icon: Factory, tone: 'bg-mango-soft' },
         { href: '/orders?status=READY', label: 'Готовы к отгрузке', value: data.ready, hint: 'ждут курьера', icon: PackageCheck, tone: 'bg-[#e4f1d0]' },
         {
@@ -122,7 +122,7 @@ export default function DashboardPage() {
             })}
           </div>
           {data && (() => {
-            const active = data.newOrders + data.awaitingPayment.count + data.paid + data.inProduction + data.ready;
+            const active = data.newOrders + data.inProduction + data.ready;
             return (
               <p className="mt-6 text-sm text-muted">
                 В работе {active} {plural(active, 'заказ', 'заказа', 'заказов')}. Нажмите на карточку, чтобы открыть список.

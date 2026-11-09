@@ -61,7 +61,7 @@ export class DeliveryService {
         const already = await this.prisma.auditLog.findFirst({ where: { action: key } });
         if (!already) {
           await this.prisma.auditLog.create({ data: { userId: user.id, action: key, entity: 'Order', entityId: o.id } });
-          await this.notifications.toPartner(o.partnerId, {
+          await this.notifications.toUsers([o.createdById], {
             title: `Заказ №${o.number}`,
             body: 'Курьер подъезжает — будет через пару минут',
             orderId: o.id,
@@ -90,7 +90,7 @@ export class DeliveryService {
         include: { partner: true, items: true },
       }),
       this.prisma.order.findMany({
-        where: { status: 'READY', OR: [{ courierId: null }, { courierId: user.id }] },
+        where: { channel: 'PARTNER', status: 'READY', OR: [{ courierId: null }, { courierId: user.id }] },
         include: { partner: true, items: true },
         orderBy: [{ deliveryDate: 'asc' }, { number: 'asc' }],
       }),
@@ -110,7 +110,7 @@ export class DeliveryService {
       orderId: o.id,
       number: o.number,
       status: o.status,
-      partner: { name: o.partner.name, contactName: o.partner.contactName, phone: o.partner.phone },
+      partner: { name: o.partner?.name ?? 'Гость', contactName: o.partner?.contactName ?? null, phone: o.partner?.phone ?? null },
       address: o.deliveryAddress,
       entrance: o.deliveryEntrance,
       comment: o.comment,
@@ -164,7 +164,7 @@ export class DeliveryService {
       include: { partner: true, courier: { select: { id: true, name: true, phone: true } } },
     });
     if (!o) throw new NotFoundException('Заказ не найден');
-    const owner = !!user.partnerId && user.partnerId === o.partnerId;
+    const owner = (!!user.partnerId && user.partnerId === o.partnerId) || o.createdById === user.id;
     if (!owner && !isStaff(user)) throw new ForbiddenException('Нет доступа к заказу');
     if (user.role === 'COURIER' && o.courierId && o.courierId !== user.id) throw new ForbiddenException('Чужой заказ');
 
@@ -234,7 +234,7 @@ export class DeliveryService {
     if (user.role === 'COURIER' && o.courierId !== user.id) throw new ForbiddenException('Чужой заказ');
     const updated = await this.prisma.order.update({ where: { id: orderId }, data: { arrivedAt: new Date() } });
     await this.audit.log(user.id, 'order.arrived', 'Order', orderId);
-    await this.notifications.toPartner(o.partnerId, {
+    await this.notifications.toUsers([o.createdById], {
       title: `Заказ №${o.number}`,
       body: 'Курьер на месте и скоро передаст заказ',
       orderId,

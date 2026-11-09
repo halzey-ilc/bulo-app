@@ -14,6 +14,11 @@ export class ReportsController {
     return this.reports.sales(from, to);
   }
 
+  @Get('revenue')
+  revenue() {
+    return this.reports.revenue();
+  }
+
   @Get('debts')
   debts() {
     return this.reports.debts();

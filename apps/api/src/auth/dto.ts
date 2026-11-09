@@ -27,6 +27,14 @@ export class VerifyOtpDto {
   code: string;
 }
 
+export class OtpLoginDto extends VerifyOtpDto {
+  /** Имя — для нового гостя, который входит впервые */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  name?: string;
+}
+
 export class RegisterPartnerDto extends VerifyOtpDto {
   @IsString()
   @MinLength(2)

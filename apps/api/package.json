@@ -11,7 +11,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "ts-node prisma/seed.ts",
-    "catalog:import": "ts-node prisma/import-catalog.ts"
+    "catalog:import": "ts-node prisma/import-catalog.ts",
+    "menu:import": "ts-node prisma/import-menu.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -29,6 +30,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "exceljs": "^4.4.0",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },
@@ -39,6 +41,7 @@
     "@types/jest": "^29.5.14",
     "@types/multer": "^1.4.12",
     "@types/node": "^22.10.0",
+    "@types/qrcode": "^1.5.5",
     "jest": "^29.7.0",
     "prisma": "^6.5.0",
     "ts-jest": "^29.2.5",
@@ -51,7 +54,11 @@
     "transform": {
       "^.+\\.ts$": "ts-jest"
     },
-    "moduleFileExtensions": ["ts", "js", "json"],
+    "moduleFileExtensions": [
+      "ts",
+      "js",
+      "json"
+    ],
     "testEnvironment": "node"
   }
 }

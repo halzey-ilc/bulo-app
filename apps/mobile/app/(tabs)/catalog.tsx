@@ -5,6 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Product } from '../../src/api';
 import { AdminCatalog } from '../../src/components/admin/AdminCatalog';
 import { NoOrderNote, PartnerStatusCard, SignInCta } from '../../src/components/gates';
+import { useIsCafe } from '../../src/lib/branch';
+import { BranchChip } from '../../src/components/cafe';
 import { Icon } from '../../src/components/Icon';
 import { BrandRefresh, StatusScrim, TAB_BAR_SPACE } from '../../src/components/layout';
 import { FadeIn } from '../../src/components/motion';
@@ -33,7 +35,8 @@ function CatalogScreen() {
   const params = useLocalSearchParams<{ categoryId?: string; isNew?: string; fav?: string }>();
   const insets = useSafeAreaInsets();
   const user = useAuth((s) => s.user);
-  const canOrder = !!user?.permissions.canOrder;
+  const cafe = useIsCafe();
+  const canOrder = !!user?.permissions.canOrder || (cafe && !user);
   const copy = buyerCopy(user);
 
   const [categoryId, setCategoryId] = useState<string | undefined>(params.categoryId);
@@ -108,13 +111,19 @@ function CatalogScreen() {
   const header = (
     <View style={{ gap: space.lg, paddingBottom: space.md }}>
       <View>
-        <T v="display">Каталог</T>
-        <T v="body" color={colors.textMuted}>
-          {user ? copy.priceNote : 'Свежая выпечка к вашему утру'}
-        </T>
+        <T v="display">{cafe ? 'Меню' : 'Каталог'}</T>
+        {cafe ? (
+          <View style={{ marginTop: 6 }}>
+            <BranchChip />
+          </View>
+        ) : (
+          <T v="body" color={colors.textMuted}>
+            {user ? copy.priceNote : 'Свежая выпечка к вашему утру'}
+          </T>
+        )}
       </View>
       <Field
-        placeholder="Найти синнабон, торт, сэндвич…"
+        placeholder={cafe ? 'Латте, синнабон, круассан…' : 'Найти синнабон, торт, сэндвич…'}
         value={search}
         onChangeText={setSearch}
         onFocus={() => setSearchFocused(true)}
@@ -185,7 +194,7 @@ function CatalogScreen() {
           />
         ))}
       </ScrollView>
-      {!user && <SignInCta compact />}
+      {!user && !cafe && <SignInCta compact />}
       {user && <PartnerStatusCard user={user} />}
       {user?.role === 'GUEST' && !canOrder && <NoOrderNote />}
       {filtered && !products.loading && (

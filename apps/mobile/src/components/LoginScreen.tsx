@@ -27,15 +27,15 @@ export function LoginScreen({ initialTab }: { initialTab?: Tab }) {
 
   return (
     <AuthScaffold
-      title="Вход в BULO"
-      subtitle="По номеру телефона или по логину и паролю."
+      title={tab === 'phone' ? 'Вход и регистрация' : 'Вход для сотрудников'}
+      subtitle={tab === 'phone' ? 'Номер телефона и код из SMS — без паролей. Бронь кофе с собой и карта «7-й в подарок».' : 'Логин и пароль выдаёт администратор BULO.'}
     >
       <Segmented<Tab>
         value={tab}
         onChange={setTab}
         items={[
           { key: 'phone', label: 'По номеру', icon: 'phone' },
-          { key: 'password', label: 'Логин и пароль', icon: 'key' },
+          { key: 'password', label: 'Сотрудникам', icon: 'key' },
         ]}
       />
       {tab === 'phone' ? (
@@ -57,7 +57,7 @@ function PhoneForm() {
   const [digits, setDigits] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notFound, setNotFound] = useState(false);
+  const notFound = false;
   const valid = digits.length === 9;
   const phone = `+996${digits}`;
 
@@ -65,13 +65,14 @@ function PhoneForm() {
     if (!valid) return setError('Введите 9 цифр номера');
     setLoading(true);
     setError(null);
-    setNotFound(false);
     try {
       const r = await Auth.requestOtp(phone, 'LOGIN');
-      router.push({ pathname: '/login/code', params: { phone: r.phone || phone, devCode: r.devCode ?? '' } });
+      router.push({
+        pathname: '/login/code',
+        params: { phone: r.phone || phone, devCode: r.devCode ?? '', isNew: r.isNew ? '1' : '', name: r.name ?? '' },
+      });
     } catch (e) {
-      if (e instanceof ApiError && e.status === 404) setNotFound(true);
-      else if (e instanceof ApiError && e.status === 429) {
+      if (e instanceof ApiError && e.status === 429) {
         // код уже отправлен недавно — можно ввести его
         router.push({ pathname: '/login/code', params: { phone, devCode: '', recent: '1' } });
       } else setError(errorMessage(e));
@@ -87,7 +88,6 @@ function PhoneForm() {
         onChange={(d) => {
           setDigits(d);
           setError(null);
-          setNotFound(false);
         }}
         onSubmit={submit}
         error={error}
@@ -116,8 +116,24 @@ function PhoneForm() {
           </View>
         </FadeIn>
       )}
+      <View style={styles.perks}>
+        {[
+          ['clock', 'Бронь кофе и выпечки — заберёте без очереди'],
+          ['gift', 'Каждый 7-й кофе — в подарок'],
+          ['bell', 'Уведомим, когда заказ готов'],
+        ].map(([icon, text]) => (
+          <View key={icon} style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+            <View style={styles.perkIcon}>
+              <Icon name={icon} size={16} color={colors.mango} strokeWidth={2} />
+            </View>
+            <T v="small" style={{ flex: 1, fontFamily: fonts.semibold }}>
+              {text}
+            </T>
+          </View>
+        ))}
+      </View>
       <T v="small" color={colors.textSoft}>
-        Пришлём одноразовый код в SMS. Нажимая «Получить код», вы соглашаетесь на обработку номера для входа.
+        Пришлём одноразовый код в SMS. Новый номер — сразу зарегистрируем. Нажимая «Получить код», вы соглашаетесь на обработку номера.
       </T>
     </View>
   );
@@ -209,7 +225,7 @@ function PasswordForm() {
       <View style={styles.hint}>
         <Icon name="info" size={18} color={colors.blueberry} />
         <T v="small" color={colors.blueberry} style={{ flex: 1, fontFamily: fonts.semibold }}>
-          Логин и пароль выдаёт администратор BULO — для сотрудников, клиентов и гостей. Забыли пароль? Позвоните менеджеру.
+          Для сотрудников и партнёров с выданным логином. Гостям кофейни пароль не нужен — входите по номеру. Забыли пароль? Позвоните менеджеру.
         </T>
       </View>
     </View>
@@ -223,9 +239,9 @@ function PartnerCta() {
         <Icon name="shop" size={20} color={colors.mango} />
       </View>
       <View style={{ flex: 1 }}>
-        <T v="bodyStrong">Стать партнёром</T>
+        <T v="bodyStrong">Вы кофейня или магазин?</T>
         <T v="small" color={colors.textMuted}>
-          Для кофеен и магазинов — оптовые цены
+          Станьте партнёром — оптовые цены и доставка
         </T>
       </View>
       <Icon name="chevronRight" size={18} color={colors.textSoft} />
@@ -235,6 +251,8 @@ function PartnerCta() {
 
 const styles = StyleSheet.create({
   notFound: { gap: space.sm, backgroundColor: colors.softYellow, borderRadius: radius.xl, padding: space.lg },
+  perks: { gap: space.sm, backgroundColor: colors.white, borderRadius: radius.lg, padding: space.md },
+  perkIcon: { width: 30, height: 30, borderRadius: 10, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
   eye: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   hint: {
     flexDirection: 'row',

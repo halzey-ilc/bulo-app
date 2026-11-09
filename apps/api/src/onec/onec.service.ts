@@ -3,7 +3,7 @@ import { OneCDocStatus, OneCDocType } from '@prisma/client';
 import { isIsoDate } from '../common/dates';
 import { ExcelService, ExcelSheet } from '../common/excel.service';
 import { PrismaService } from '../common/prisma.service';
-import type { CounterpartiesDto, NomenclatureDto, PricesImportDto, PriceTypesDto } from './onec.dto';
+import type { CounterpartiesDto, NomenclatureDto, PricesImportDto, PriceTypesDto, StockImportDto } from './onec.dto';
 
 /** Документы в очереди, которые повторяем не бесконечно. */
 const MAX_ATTEMPTS = 10;
@@ -12,7 +12,18 @@ const DOC_LABELS: Record<OneCDocType, string> = {
   CUSTOMER_ORDER: 'Заказ клиента',
   PRODUCTION: 'Заказ на производство',
   SALE: 'Реализация товаров и услуг',
+  CANCEL: 'Отмена заказа (возврат товара)',
 };
+
+/** Название для сравнения с 1С: без регистра, кавычек, лишних пробелов, ё = е. */
+export function normName(s: string) {
+  return s
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/[«»"'“”]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 interface OrderPayload {
   orderNumber: number;
@@ -82,7 +93,14 @@ export class OneCService {
           weight: i.weight,
           shelfLife: i.shelfLife,
         };
-        const existing = await this.prisma.product.findUnique({ where: { oneCId: i.id } });
+        let existing = await this.prisma.product.findUnique({ where: { oneCId: i.id } });
+        if (!existing) {
+          // товар уже заведён в BULO (меню из Excel) без кода 1С — привязываем по названию, а не создаём дубль
+          const twin = (await this.prisma.product.findMany({ where: { oneCId: null }, select: { id: true, name: true } })).find(
+            (p) => normName(p.name) === normName(i.name),
+          );
+          if (twin) existing = await this.prisma.product.update({ where: { id: twin.id }, data: { oneCId: i.id } });
+        }
         if (existing) {
           // описание и фото ведутся в BULO — из 1С берём только если своего нет
           await this.prisma.product.update({
@@ -135,6 +153,40 @@ export class OneCService {
         });
       }
       return { items: dto.items.length, skipped };
+    });
+  }
+
+  /**
+   * Остатки по складам. replace=true (по умолчанию) — по каждому складу из пакета это полный список:
+   * товары, которых нет в пакете, считаются закончившимися.
+   */
+  importStock(dto: StockImportDto) {
+    return this.run('stock', dto.items.length, async () => {
+      const products = await this.prisma.product.findMany({ where: { oneCId: { not: null } }, select: { id: true, oneCId: true } });
+      const pid = new Map(products.map((p) => [p.oneCId!, p.id]));
+      const skipped: string[] = [];
+      const rows = dto.items.flatMap((i) => {
+        const productId = pid.get(i.productId);
+        if (!productId) {
+          skipped.push(i.productId);
+          return [];
+        }
+        return [{ productId, warehouseId: i.warehouseId, qty: i.qty }];
+      });
+      const warehouses = [...new Set(dto.items.map((i) => i.warehouseId))];
+      await this.prisma.$transaction(async (tx) => {
+        if (dto.replace !== false) {
+          await tx.stock.updateMany({ where: { warehouseId: { in: warehouses } }, data: { qty: 0 } });
+        }
+        for (const r of rows) {
+          await tx.stock.upsert({
+            where: { productId_warehouseId: { productId: r.productId, warehouseId: r.warehouseId } },
+            create: r,
+            update: { qty: r.qty },
+          });
+        }
+      });
+      return { items: dto.items.length, warehouses, skipped };
     });
   }
 
@@ -207,7 +259,17 @@ export class OneCService {
       this.prisma.oneCSyncLog.findFirst({ where: { direction: 'IN' }, orderBy: { createdAt: 'desc' } }),
       this.prisma.oneCSyncLog.findFirst({ where: { direction: 'OUT' }, orderBy: { createdAt: 'desc' } }),
     ]);
-    return { pending, errors, sent, lastIn, lastOut, apiKeyConfigured: !!process.env.ONEC_API_KEY };
+    return {
+      pending,
+      errors,
+      sent,
+      lastIn,
+      lastOut,
+      apiKeyConfigured: !!process.env.ONEC_API_KEY,
+      /** Мы сами отправляем документы и забираем остатки (заданы адрес и логин 1С) */
+      pushConfigured: !!(process.env.ONEC_URL && process.env.ONEC_LOGIN),
+      stockItems: await this.prisma.stock.count(),
+    };
   }
 
   counterparties(search?: string) {

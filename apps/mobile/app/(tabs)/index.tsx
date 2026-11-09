@@ -7,9 +7,11 @@ import { NoOrderNote, PartnerStatusCard, SignInCta } from '../../src/components/
 import { Icon, IconName } from '../../src/components/Icon';
 import { Screen } from '../../src/components/layout';
 import { buildStories, StoriesRow } from '../../src/components/Stories';
+import { BranchChip, LoyaltyCard } from '../../src/components/cafe';
+import { useBranch, useIsCafe } from '../../src/lib/branch';
 import { Logo } from '../../src/components/Logo';
 import { FadeIn, Pulse } from '../../src/components/motion';
-import { FlowDots, StatusChip } from '../../src/components/order';
+import { FlowDots, orderTitle, orderWhen, StatusChip } from '../../src/components/order';
 import { ProductCard, ProductCardSkeleton, ProductImage } from '../../src/components/product';
 import { Button, Card, IconButton, SectionTitle, Skeleton, T, Touchable } from '../../src/components/ui';
 import { buyerCopy, durationText, useCutoff } from '../../src/lib/cutoff';
@@ -28,7 +30,10 @@ export default function Home() {
   const uid = user?.id ?? 'anon';
   const authed = !!user;
   const buyer = persona === 'buyer';
-  const canOrder = !!user?.permissions.canOrder;
+  const cafe = useIsCafe();
+  const { branch } = useBranch();
+  // гость кофейни может собирать корзину и без входа — номер спросим при оформлении
+  const canOrder = !!user?.permissions.canOrder || (cafe && !user);
   const copy = buyerCopy(user);
 
   const info = useQuery(Q.info(), { staleTime: 5 * 60_000 });
@@ -37,6 +42,8 @@ export default function Home() {
   const rules = useQuery(Q.rules());
   const orders = useQuery(Q.orders(uid), { enabled: authed && buyer });
   const notif = useQuery(Q.notifications(uid), { enabled: authed });
+  const custom = useQuery(Q.stories(uid), { staleTime: 5 * 60_000 });
+  const loyalty = useQuery(Q.loyalty(uid), { enabled: authed && cafe && buyer });
   const favIds = usePrefs((s) => s.favorites);
   const cutoff = useCutoff(rules.data);
 
@@ -46,9 +53,11 @@ export default function Home() {
     info.refresh();
     cats.refresh();
     rules.refresh();
+    custom.refresh();
     if (authed) {
       orders.refresh();
       notif.refresh();
+      if (cafe) loyalty.refresh();
       void useAuth.getState().refresh();
     }
   };
@@ -64,8 +73,17 @@ export default function Home() {
   }, [favIds, products.data]);
   const frequent = useMemo(() => frequentProducts(orders.data, products.data), [orders.data, products.data]);
   const stories = useMemo(
-    () => buildStories({ products: products.data, categories: cats.data, canOrder, cutoffTime: rules.data?.cutoffTime }),
-    [products.data, cats.data, canOrder, rules.data?.cutoffTime],
+    () =>
+      buildStories({
+        products: products.data,
+        categories: cats.data,
+        canOrder,
+        cutoffTime: rules.data?.cutoffTime,
+        custom: custom.data,
+        cafe,
+        promoEvery: rules.data?.promo?.every,
+      }),
+    [products.data, cats.data, canOrder, rules.data?.cutoffTime, rules.data?.promo?.every, custom.data, cafe],
   );
 
   return (
@@ -79,6 +97,11 @@ export default function Home() {
           <T v="h1" numberOfLines={1}>
             {name.charAt(0).toUpperCase() + name.slice(1)}
           </T>
+          {cafe && (
+            <View style={{ marginTop: 6 }}>
+              <BranchChip />
+            </View>
+          )}
         </View>
         {authed && (
           <IconButton name="bell" badge={notif.data?.unread} onPress={() => router.push('/notifications')} label="Уведомления" />
@@ -97,10 +120,20 @@ export default function Home() {
       {authed && buyer && orders.loading && <Skeleton style={{ height: 92, borderRadius: radius.xl }} />}
       {activeOrder && <ActiveOrderCard order={activeOrder} />}
 
-      {/* Отсечка приёма заказов с живым обратным отсчётом */}
-      <CutoffCard cutoff={cutoff} minSum={rules.data?.minOrderSum ?? info.data?.minOrderSum} canOrder={canOrder} />
+      {cafe ? (
+        <>
+          {/* Карта гостя «7-й кофе в подарок» */}
+          {(rules.data?.promo?.enabled ?? true) && (
+            <LoyaltyCard loyalty={authed ? loyalty.data : null} onSignIn={authed ? undefined : () => router.push('/login')} />
+          )}
+          <CafeHero branchName={branch?.name} empty={branch?.menuSize === 0} />
+        </>
+      ) : (
+        /* Отсечка приёма заказов с живым обратным отсчётом */
+        <CutoffCard cutoff={cutoff} minSum={rules.data?.minOrderSum ?? info.data?.minOrderSum} canOrder={canOrder} />
+      )}
 
-      {!authed && <SignInCta />}
+      {!authed && !cafe && <SignInCta />}
 
       {/* Повтор последнего заказа в одно касание */}
       {canOrder && lastOrder && <RepeatCard order={lastOrder} />}
@@ -136,7 +169,7 @@ export default function Home() {
       {/* Категории */}
       {!!cats.data?.length && (
         <View style={{ gap: space.md }}>
-          <SectionTitle title="Что печём" />
+          <SectionTitle title={cafe ? 'Меню' : 'Что печём'} />
           <View style={styles.catGrid}>
             {cats.data.map((c) => (
               <Touchable
@@ -228,13 +261,13 @@ function ActiveOrderCard({ order }: { order: Order }) {
           </View>
           <View style={{ flex: 1, gap: 4 }}>
             <T v="bodyStrong">
-              Заказ №{order.number} · на {dayLabel(order.deliveryDate).toLowerCase()}
+              {orderTitle(order)} · {orderWhen(order)}
             </T>
-            <StatusChip status={order.status} small />
+            <StatusChip status={order.status} small channel={order.channel} />
           </View>
           <Icon name="chevronRight" size={18} color={colors.textSoft} />
         </View>
-        <FlowDots status={order.status} />
+        <FlowDots status={order.status} channel={order.channel} />
         {order.status === 'SHIPPED' && (
           <Touchable onPress={() => router.push(`/track/${order.id}`)} haptic style={styles.trackBtn}>
             <Icon name="navigation" size={18} color={colors.white} />
@@ -278,6 +311,42 @@ function RepeatCard({ order }: { order: Order }) {
         <Button title="В корзину" icon="repeat" small onPress={() => repeatOrder(order)} />
       </View>
     </FadeIn>
+  );
+}
+
+/** Кофейня: забронируйте и заберите без очереди. */
+function CafeHero({ branchName, empty }: { branchName?: string; empty?: boolean }) {
+  return (
+    <View style={styles.promo}>
+      <Svg style={StyleSheet.absoluteFill} viewBox="0 0 340 200" preserveAspectRatio="xMidYMid slice">
+        <Circle cx={315} cy={20} r={80} fill="#FFFFFF" opacity={0.12} />
+        <Circle cx={300} cy={190} r={46} fill={colors.cambodia} opacity={0.14} />
+      </Svg>
+      <View style={styles.promoTag}>
+        <Icon name="clock" size={14} color={colors.mango} strokeWidth={2} />
+        <T v="caption" color={colors.mango} style={{ fontFamily: fonts.extrabold }}>
+          БЕЗ ОЧЕРЕДИ
+        </T>
+      </View>
+      <T v="h2" color={colors.white} style={{ maxWidth: 260 }}>
+        {empty ? `Меню «${branchName}» скоро появится` : 'Забронируйте — и заберите к своему времени'}
+      </T>
+      <T v="small" color="rgba(255,255,255,0.92)" style={{ maxWidth: 270, fontFamily: fonts.semibold }}>
+        {empty
+          ? 'Пока можно заказать в другом филиале — смените его вверху'
+          : `Соберём кофе и выпечку${branchName ? ` в филиале «${branchName}»` : ''}. Оплата по QR или на кассе.`}
+      </T>
+      {!empty && (
+        <Button
+          title="Открыть меню"
+          kind="light"
+          small
+          icon="arrowRight"
+          onPress={() => router.navigate('/catalog')}
+          style={{ alignSelf: 'flex-start', marginTop: space.xs }}
+        />
+      )}
+    </View>
   );
 }
 

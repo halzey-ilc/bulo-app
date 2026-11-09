@@ -218,7 +218,7 @@ function OrdersInner() {
                       </Link>
                     </Td>
                     <Td>
-                      <div className="font-semibold">{o.partner?.name}</div>
+                      <div className="font-semibold">{o.partner?.name ?? (o.buyer ? `☕ ${o.buyer}` : '')}</div>
                       <div className="text-xs text-muted">{o.items?.length ?? 0} поз.</div>
                     </Td>
                     <Td className="whitespace-nowrap">{fmtDate(o.deliveryDate)}</Td>

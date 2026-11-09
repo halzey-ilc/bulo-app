@@ -68,3 +68,17 @@ export class AckDto {
   @IsOptional() @IsString() number?: string;
   @IsOptional() @IsString() error?: string;
 }
+
+export class StockItem {
+  /** Код номенклатуры в 1С */
+  @IsString() productId: string;
+  /** Код склада в 1С */
+  @IsString() warehouseId: string;
+  @IsNumber() qty: number;
+}
+
+export class StockImportDto {
+  @IsArray() @ValidateNested({ each: true }) @Type(() => StockItem) items: StockItem[];
+  /** true (по умолчанию) — полный список по складам из пакета */
+  @IsOptional() @IsBoolean() replace?: boolean;
+}

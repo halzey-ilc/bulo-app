@@ -10,7 +10,8 @@ import { deliveryPhrase } from '../src/lib/format';
 import { colors, space } from '../src/theme';
 
 export default function OrderSuccess() {
-  const { id, number, date } = useLocalSearchParams<{ id: string; number: string; date?: string }>();
+  const { id, number, date, cafe, time } = useLocalSearchParams<{ id: string; number: string; date?: string; cafe?: string; time?: string }>();
+  const isCafe = cafe === '1';
   const insets = useSafeAreaInsets();
   const pop = useRef(new Animated.Value(0)).current;
 
@@ -38,16 +39,17 @@ export default function OrderSuccess() {
         </Animated.View>
         <FadeIn delay={250} style={{ gap: space.md, alignItems: 'center' }}>
           <T v="display" center>
-            Заказ №{number} принят!
+            {isCafe ? `Бронь №${number} оформлена!` : `Заказ №${number} оформлен!`}
           </T>
           <T v="body" center color={colors.textMuted} style={{ maxWidth: 300, fontSize: 16, lineHeight: 24 }}>
-            {date ? `Доставка — ${deliveryPhrase(date)}. ` : ''}
-            Менеджер проверит заказ и подтвердит его — статус обновится сам, а мы пришлём уведомление.
+            {isCafe
+              ? `Приготовим к ${time ?? 'выбранному времени'}. Если выбрали QR — оплатите на следующем экране. Пришлём уведомление, когда всё будет готово.`
+              : `${date ? `Доставка — ${deliveryPhrase(date)}. ` : ''}Оплатите заказ — как только оплата придёт, менеджер подтвердит его и он уйдёт в цех.`}
           </T>
         </FadeIn>
       </View>
       <View style={{ gap: space.sm }}>
-        <Button title="Следить за заказом" onPress={() => router.replace(`/order/${id}`)} />
+        <Button title={isCafe ? 'Открыть бронь' : 'Оплата и статус'} onPress={() => router.replace(`/order/${id}`)} />
         <Button title="На главную" kind="ghost" onPress={() => router.replace('/')} />
       </View>
     </View>

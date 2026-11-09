@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { photoSrc } from '../api/admin';
-import type { Category, Product } from '../api';
+import type { Category, Product, StoryItem } from '../api';
 import { money } from '../lib/format';
 import { usePrefs } from '../store/prefs';
 import { colors, fonts, space } from '../theme';
@@ -38,19 +38,26 @@ export interface StoryGroup {
 const SLIDE_MS = 5000;
 
 /**
- * Истории из каталога: «Новинки», по категориям (только товары с фото), «Как заказать».
- * Без отдельной админки — меняется вместе с каталогом.
+ * Истории: сначала те, что добавили админ или менеджер (акции, новинки),
+ * потом собранные из каталога: «Новинки», по категориям (только товары с фото), «Как заказать».
  */
 export function buildStories({
   products,
   categories,
   canOrder,
   cutoffTime,
+  custom,
+  cafe,
+  promoEvery,
 }: {
   products: Product[] | undefined;
   categories: Category[] | undefined;
   canOrder: boolean;
   cutoffTime?: string | null;
+  custom?: StoryItem[];
+  /** Гость кофейни: свои подсказки «как заказать» */
+  cafe?: boolean;
+  promoEvery?: number;
 }): StoryGroup[] {
   const list = products ?? [];
   const withPhoto = list.filter((p) => !!p.photoUrl);
@@ -58,11 +65,27 @@ export function buildStories({
     id: p.id,
     photo: p.photoUrl,
     title: p.name,
-    text: [p.weight, canOrder && p.price != null ? `${money(p.price)} за ${p.unit}` : null].filter(Boolean).join(' · ') || undefined,
+    text: [p.weight, (canOrder || cafe) && p.price != null ? `${money(p.price)}` : null].filter(Boolean).join(' · ') || undefined,
     cta: { label: 'Подробнее', onPress: () => router.push(`/product/${p.id}`) },
   });
 
   const groups: StoryGroup[] = [];
+  for (const s of custom ?? []) {
+    groups.push({
+      key: `s:${s.id}`,
+      label: shortName(s.title).slice(0, 14),
+      cover: s.imageUrl,
+      slides: [
+        {
+          id: s.id,
+          photo: s.imageUrl,
+          title: s.title,
+          text: s.caption ?? undefined,
+          cta: s.productId ? { label: 'Заказать', onPress: () => router.push(`/product/${s.productId}`) } : undefined,
+        },
+      ],
+    });
+  }
   const news = withPhoto.filter((p) => p.isNew);
   if (news.length) groups.push({ key: 'new', label: 'Новинки', cover: news[0].photoUrl, slides: news.slice(0, 8).map(slide) });
 
@@ -70,6 +93,27 @@ export function buildStories({
     const items = withPhoto.filter((p) => p.categoryId === c.id);
     if (items.length < 2) continue;
     groups.push({ key: `cat:${c.id}`, label: shortName(c.name), cover: c.imageUrl ?? items[0].photoUrl, slides: items.slice(0, 8).map(slide) });
+  }
+
+  if (cafe) {
+    groups.push({
+      key: 'how-cafe',
+      label: 'Как заказать',
+      icon: 'sparkle',
+      slides: [
+        { id: 'c1', icon: 'clock', bg: colors.mango, title: 'Забронируйте заранее', text: 'Выберите кофе и выпечку, время — и заберите без очереди. Мы приготовим к вашему приходу.' },
+        { id: 'c2', icon: 'gift', bg: colors.coffee, title: `${promoEvery ?? 7}-й кофе — в подарок`, text: 'Каждый кофе ставит штамп в карту гостя. Седьмой — за наш счёт, автоматически.' },
+        {
+          id: 'c3',
+          icon: 'card',
+          bg: colors.cambodia,
+          title: 'Оплата по QR или на кассе',
+          text: 'Оплатите по QR-коду в приложении банка или наличными, когда заберёте заказ.',
+          cta: { label: 'В меню', onPress: () => router.navigate('/catalog') },
+        },
+      ],
+    });
+    return groups;
   }
 
   groups.push({

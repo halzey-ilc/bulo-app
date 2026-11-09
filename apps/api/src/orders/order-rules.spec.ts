@@ -1,9 +1,11 @@
 import {
   allowedTransitions,
+  canConfirm,
   canTransition,
   checkDeliveryDate,
   checkMultiplicity,
   earliestDeliveryDate,
+  paymentAllowed,
 } from './order-rules';
 
 // 2026-11-02 10:00 в Бишкеке (UTC+6) = 04:00 UTC
@@ -40,21 +42,23 @@ describe('checkMultiplicity', () => {
   });
 });
 
-describe('переходы статусов', () => {
-  it('новый заказ сразу идёт в цех, без одобрения и оплаты', () => {
-    expect(canTransition('NEW', 'IN_PRODUCTION', 'WORKSHOP')).toBe(true);
-    expect(canTransition('NEW', 'APPROVED', 'MANAGER')).toBe(false);
-    expect(canTransition('NEW', 'PAID', 'ACCOUNTANT')).toBe(false);
+describe('переходы статусов: партнёры', () => {
+  it('новый заказ ждёт оплаты: цех его не берёт, пока не подтвердят', () => {
+    expect(canTransition('NEW', 'IN_PRODUCTION', 'WORKSHOP')).toBe(false);
+    expect(canTransition('PAID', 'IN_PRODUCTION', 'WORKSHOP')).toBe(true);
+  });
+
+  it('подтверждают админ, менеджер и бухгалтер; кассир — только брони кофейни', () => {
+    expect(canConfirm('MANAGER', 'PARTNER')).toBe(true);
+    expect(canConfirm('ADMIN', 'PARTNER')).toBe(true);
+    expect(canConfirm('CASHIER', 'PARTNER')).toBe(false);
+    expect(canConfirm('CASHIER', 'CAFE')).toBe(true);
+    expect(canConfirm('WORKSHOP', 'PARTNER')).toBe(false);
   });
 
   it('менеджер может отклонить новый заказ, кассир — нет', () => {
     expect(canTransition('NEW', 'REJECTED', 'MANAGER')).toBe(true);
     expect(canTransition('NEW', 'REJECTED', 'CASHIER')).toBe(false);
-  });
-
-  it('старые одобренные и оплаченные заказы можно довести до цеха', () => {
-    expect(canTransition('APPROVED', 'IN_PRODUCTION', 'WORKSHOP')).toBe(true);
-    expect(canTransition('PAID', 'IN_PRODUCTION', 'WORKSHOP')).toBe(true);
   });
 
   it('курьер забирает только готовые заказы', () => {
@@ -64,6 +68,30 @@ describe('переходы статусов', () => {
 
   it('партнёр может отменить только новый заказ', () => {
     expect(allowedTransitions('NEW', 'PARTNER')).toEqual(['CANCELLED']);
-    expect(allowedTransitions('APPROVED', 'PARTNER')).toEqual([]);
+    expect(allowedTransitions('PAID', 'PARTNER')).toEqual([]);
+  });
+});
+
+describe('переходы статусов: бронь кофейни', () => {
+  it('кассир отмечает «готово» и «выдан», в цех бронь не идёт', () => {
+    expect(canTransition('PAID', 'READY', 'CASHIER', 'CAFE')).toBe(true);
+    expect(canTransition('READY', 'DELIVERED', 'CASHIER', 'CAFE')).toBe(true);
+    expect(canTransition('PAID', 'IN_PRODUCTION', 'WORKSHOP', 'CAFE')).toBe(false);
+    expect(canTransition('READY', 'SHIPPED', 'COURIER', 'CAFE')).toBe(false);
+  });
+
+  it('гость может отменить бронь, пока её не подтвердили', () => {
+    expect(allowedTransitions('NEW', 'CLIENT', 'CAFE')).toEqual(['CANCELLED']);
+    expect(allowedTransitions('PAID', 'CLIENT', 'CAFE')).toEqual([]);
+  });
+});
+
+describe('способы оплаты', () => {
+  it('в кофейне — QR или наличные, у партнёра ещё и счёт', () => {
+    expect(paymentAllowed('QR', 'CAFE')).toBe(true);
+    expect(paymentAllowed('CASH', 'CAFE')).toBe(true);
+    expect(paymentAllowed('BANK', 'CAFE')).toBe(false);
+    expect(paymentAllowed('BANK', 'PARTNER')).toBe(true);
+    expect(paymentAllowed('CARD', 'PARTNER')).toBe(false);
   });
 });

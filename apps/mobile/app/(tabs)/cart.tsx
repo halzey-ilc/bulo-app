@@ -3,6 +3,8 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NoOrderNote, PartnerStatusCard } from '../../src/components/gates';
+import { BranchChip, usePromoPreview } from '../../src/components/cafe';
+import { useIsCafe } from '../../src/lib/branch';
 import { Icon } from '../../src/components/Icon';
 import { Screen, TAB_BAR_SPACE } from '../../src/components/layout';
 import { FadeIn, ProgressBar, SwipeToDelete } from '../../src/components/motion';
@@ -28,16 +30,21 @@ export default function CartScreen() {
   const insets = useSafeAreaInsets();
   const user = useAuth((s) => s.user);
   const uid = user?.id ?? 'anon';
-  const canOrder = !!user?.permissions.canOrder;
+  const cafe = useIsCafe();
+  // гость кофейни собирает корзину и без входа — номер спросим при оформлении
+  const canOrder = !!user?.permissions.canOrder || (cafe && !user);
   const lines = useCart((s) => s.lines);
   const chosenDate = useCart((s) => s.deliveryDate);
   const rules = useQuery(Q.rules());
   const products = useQuery(Q.products(uid), { staleTime: 60_000, refetchOnFocus: false });
   const orders = useQuery(Q.orders(uid), { enabled: !!user, refetchOnFocus: false });
+  const loyalty = useQuery(Q.loyalty(uid), { enabled: !!user && cafe, refetchOnFocus: false });
   const cutoff = useCutoff(rules.data, 7);
+  const promo = usePromoPreview(lines, loyalty.data);
 
-  const total = cartTotal(lines);
-  const minSum = rules.data?.minOrderSum ?? 0;
+  const total = cartTotal(lines) - promo.discount;
+  // минимальная сумма — только для оптовых заказов партнёров
+  const minSum = cafe ? 0 : rules.data?.minOrderSum ?? 0;
   const left = Math.max(0, minSum - total);
   const progress = minSum ? Math.min(1, total / minSum) : 1;
   const date = chosenDate && chosenDate >= cutoff.earliest ? chosenDate : cutoff.earliest;
@@ -84,14 +91,31 @@ export default function CartScreen() {
           <EmptyState
             icon="bag"
             title="В корзине пока пусто"
-            text="Загляните в каталог — синнабоны уже ждут своей очереди в печь."
-            action="В каталог"
+            text={cafe ? 'Загляните в меню — кофе и синнабоны соберём к вашему приходу.' : 'Загляните в каталог — синнабоны уже ждут своей очереди в печь.'}
+            action={cafe ? 'В меню' : 'В каталог'}
             onAction={() => router.navigate('/catalog')}
           />
         ) : (
           <>
+            {cafe && (
+              <Card style={{ gap: space.sm }}>
+                <BranchChip />
+                {promo.free > 0 ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+                    <Icon name="gift" size={18} color={colors.coffee} />
+                    <T v="bodyStrong" color={colors.coffee} style={{ flex: 1 }}>
+                      Кофе в подарок — −{money(promo.discount)}
+                    </T>
+                  </View>
+                ) : (
+                  <T v="small" color={colors.textMuted}>
+                    Заберёте сами в филиале — время выберете при оформлении.
+                  </T>
+                )}
+              </Card>
+            )}
             {/* Когда привезти — даты с учётом времени приёма */}
-            <Card style={{ gap: space.md }}>
+            {!cafe && <Card style={{ gap: space.md }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
                 <Icon name="calendar" size={20} color={colors.mango} />
                 <T v="h3" style={{ flex: 1 }}>
@@ -141,7 +165,7 @@ export default function CartScreen() {
                   {cutoff.text}
                 </T>
               </View>
-            </Card>
+            </Card>}
 
             {lines.map((l, i) => (
               <FadeIn key={l.productId} delay={Math.min(i, 6) * 40}>
@@ -195,14 +219,14 @@ export default function CartScreen() {
         <View style={[styles.summary, { bottom: TAB_BAR_SPACE - 18 + insets.bottom }]}>
           <View style={{ flex: 1 }}>
             <T v="small" color="rgba(249,245,230,0.7)">
-              Итого · {dayLabel(date).toLowerCase()}
+              Итого · {cafe ? 'с собой' : dayLabel(date).toLowerCase()}
             </T>
             <T v="h2" color={colors.oatMilk}>
               {money(total)}
             </T>
           </View>
           <Button
-            title={left > 0 ? `Ещё ${money(left)}` : 'Оформить'}
+            title={left > 0 ? `Ещё ${money(left)}` : cafe ? 'К брони' : 'Оформить'}
             icon={left > 0 ? 'plus' : 'arrowRight'}
             kind={left > 0 ? 'light' : 'primary'}
             disabled={!canOrder}

@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { PartnerStatus, Role } from '@prisma/client';
 import { AuthUser } from '../common/auth-user';
 import { CurrentUser, Roles } from '../common/decorators';
+import { extractPayload, isValidElqr } from '../common/elqr';
 import { SettingsService } from '../common/settings.service';
 import {
   ApprovePartnerDto,
@@ -97,8 +98,16 @@ export class AdminController {
   }
 
   @Put('settings')
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'MANAGER')
   async putSettings(@Body() dto: SettingsDto) {
+    if (dto.qrPayload) {
+      try {
+        const payload = extractPayload(dto.qrPayload);
+        if (!isValidElqr(payload)) throw new Error('Контрольная сумма QR не сходится — скопируйте строку целиком');
+      } catch (e) {
+        throw new BadRequestException((e as Error).message);
+      }
+    }
     const s = await this.settings.update(dto);
     return { ...s, minOrderSum: Number(s.minOrderSum) };
   }

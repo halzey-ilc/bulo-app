@@ -103,5 +103,15 @@ export class SettingsDto {
   @IsOptional() @IsString() telegram?: string;
   /** Точка выдачи (пекарня) — старт маршрута курьера */
   @IsOptional() @IsLatitude() bakeryLat?: number;
-  @IsOptional() @IsLongitude() bakeryLng?: number;
+  /** Строка QR из банка (можно ссылкой https://bank.kg/...#0002...) */
+  @IsOptional() @IsString() qrPayload?: string;
+  @IsOptional() @IsBoolean() qrWithAmount?: boolean;
+  @IsOptional() @IsString() bankName?: string;
+  @IsOptional() @IsString() bankRecipient?: string;
+  @IsOptional() @IsString() bankAccount?: string;
+  @IsOptional() @IsString() bankBik?: string;
+  @IsOptional() @IsString() bankInn?: string;
+  @IsOptional() @IsBoolean() promoEnabled?: boolean;
+  @IsOptional() @IsNumber() @Min(2) promoEvery?: number;
+  @IsOptional() @IsString() workshopWarehouseId?: string;
 }

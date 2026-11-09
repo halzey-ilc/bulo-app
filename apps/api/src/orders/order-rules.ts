@@ -1,17 +1,16 @@
-import type { OrderStatus, Role } from '@prisma/client';
+import type { OrderChannel, OrderStatus, Role } from '@prisma/client';
 import { addDays, localNow } from '../common/dates';
 
+type Transitions = Record<OrderStatus, Partial<Record<OrderStatus, Role[]>>>;
+
 /**
- * Переходы статусов заказа и кто может их делать.
- * Принят → В производстве → Готов → Передан курьеру → Доставлен.
- * Одобрения менеджера нет: заказ сразу виден цеху, менеджер только следит и может поправить
- * или отклонить его до начала производства. Оплата отмечается отдельно (paidAt) и статус не меняет.
- * IN_PRODUCTION ставится при формировании сводной накладной (или вручную цехом).
- * APPROVED и PAID остались только у старых заказов — их можно довести до конца.
+ * Партнёр (опт, доставка):
+ * Ждёт оплаты (NEW) → подтверждён админом/менеджером после оплаты (PAID) → в цеху → готов → у курьера → доставлен.
+ * Подтверждение делается отдельным действием «Подтвердить оплату» (confirm), а не сменой статуса.
+ * Цех видит заказ только после подтверждения. APPROVED остался у старых заказов.
  */
-const TRANSITIONS: Record<OrderStatus, Partial<Record<OrderStatus, Role[]>>> = {
+const PARTNER: Transitions = {
   NEW: {
-    IN_PRODUCTION: ['ADMIN', 'MANAGER', 'WORKSHOP'],
     REJECTED: ['ADMIN', 'MANAGER'],
     CANCELLED: ['ADMIN', 'MANAGER', 'PARTNER', 'GUEST', 'CLIENT'],
   },
@@ -22,7 +21,7 @@ const TRANSITIONS: Record<OrderStatus, Partial<Record<OrderStatus, Role[]>>> = {
   },
   PAID: {
     IN_PRODUCTION: ['ADMIN', 'MANAGER', 'WORKSHOP'],
-    CANCELLED: ['ADMIN'],
+    CANCELLED: ['ADMIN', 'MANAGER'],
   },
   IN_PRODUCTION: {
     READY: ['ADMIN', 'MANAGER', 'WORKSHOP'],
@@ -38,21 +37,71 @@ const TRANSITIONS: Record<OrderStatus, Partial<Record<OrderStatus, Role[]>>> = {
   CANCELLED: {},
 };
 
-export function canTransition(from: OrderStatus, to: OrderStatus, role: Role): boolean {
-  return TRANSITIONS[from]?.[to]?.includes(role) ?? false;
+/**
+ * Гость кофейни (бронь, самовывоз):
+ * Новая бронь (NEW) → подтверждена (PAID) → готова к выдаче (READY) → выдана (DELIVERED).
+ * Бронь ведут админ, менеджер и кассир филиала.
+ */
+const CAFE_STAFF: Role[] = ['ADMIN', 'MANAGER', 'CASHIER'];
+const CAFE: Transitions = {
+  NEW: {
+    REJECTED: CAFE_STAFF,
+    CANCELLED: [...CAFE_STAFF, 'CLIENT', 'GUEST'],
+  },
+  APPROVED: {},
+  PAID: {
+    READY: CAFE_STAFF,
+    DELIVERED: CAFE_STAFF,
+    CANCELLED: CAFE_STAFF,
+  },
+  IN_PRODUCTION: {
+    READY: CAFE_STAFF,
+  },
+  READY: {
+    DELIVERED: CAFE_STAFF,
+    CANCELLED: CAFE_STAFF,
+  },
+  SHIPPED: {},
+  DELIVERED: {},
+  REJECTED: {},
+  CANCELLED: {},
+};
+
+const TABLES: Record<OrderChannel, Transitions> = { PARTNER, CAFE };
+
+export function canTransition(from: OrderStatus, to: OrderStatus, role: Role, channel: OrderChannel = 'PARTNER'): boolean {
+  return TABLES[channel][from]?.[to]?.includes(role) ?? false;
 }
 
-export function allowedTransitions(from: OrderStatus, role: Role): OrderStatus[] {
-  return (Object.entries(TRANSITIONS[from] ?? {}) as [OrderStatus, Role[]][])
+export function allowedTransitions(from: OrderStatus, role: Role, channel: OrderChannel = 'PARTNER'): OrderStatus[] {
+  return (Object.entries(TABLES[channel][from] ?? {}) as [OrderStatus, Role[]][])
     .filter(([, roles]) => roles.includes(role))
     .map(([to]) => to);
+}
+
+/** Кто подтверждает оплату и заказ. Бронь кофейни подтверждает ещё и кассир. */
+export function canConfirm(role: Role, channel: OrderChannel): boolean {
+  if (role === 'ADMIN' || role === 'MANAGER' || role === 'ACCOUNTANT') return true;
+  return channel === 'CAFE' && role === 'CASHIER';
 }
 
 /** Пока цех не начал готовить, менеджер может править позиции. */
 export const EDITABLE_STATUSES: OrderStatus[] = ['NEW', 'APPROVED', 'PAID'];
 
-/** Статусы, которые цех берёт в сводную накладную (новые и старые заказы до производства). */
-export const AWAITING_PRODUCTION: OrderStatus[] = ['NEW', 'APPROVED', 'PAID'];
+/** Статусы, которые цех берёт в сводную накладную: только подтверждённые (оплаченные) заказы партнёров. */
+export const AWAITING_PRODUCTION: OrderStatus[] = ['APPROVED', 'PAID'];
+
+/** Подтверждённый заказ: уже ушёл в 1С и считается выручкой. */
+export const CONFIRMED_STATUSES: OrderStatus[] = ['APPROVED', 'PAID', 'IN_PRODUCTION', 'READY', 'SHIPPED', 'DELIVERED'];
+
+export const PAYMENT_METHODS = ['QR', 'BANK', 'CASH'] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+/** Гость кофейни платит по QR или наличными на кассе; партнёр — ещё и на расчётный счёт. */
+export function paymentAllowed(method: string, channel: OrderChannel): method is PaymentMethod {
+  if (channel === 'CAFE') return method === 'QR' || method === 'CASH';
+  return (PAYMENT_METHODS as readonly string[]).includes(method);
+}
 
 /**
  * Проверяет дату доставки: не раньше завтрашнего дня, а на завтра — только до времени отсечки.

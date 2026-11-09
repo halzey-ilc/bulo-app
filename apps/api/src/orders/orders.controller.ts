@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { OrderStatus } from '@prisma/client';
+import { Body, Controller, Get, Param, Patch, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { OrderChannel, OrderStatus } from '@prisma/client';
 import { AuthUser } from '../common/auth-user';
 import { CurrentUser, Public, Roles } from '../common/decorators';
 import { SettingsService } from '../common/settings.service';
-import { CreateOrderDto, PaymentDto, StatusDto, UpdateItemsDto } from './order-dto';
+import { photoUpload, publicUrl } from '../common/upload';
+import { ConfirmDto, CreateOrderDto, PaymentDto, StatusDto, UpdateItemsDto } from './order-dto';
 import { earliestDeliveryDate } from './order-rules';
 import { OrdersService } from './orders.service';
 
@@ -23,6 +24,8 @@ export class OrdersController {
       cutoffTime: s.cutoffTime,
       minOrderSum: Number(s.minOrderSum),
       earliestDeliveryDate: earliestDeliveryDate(s.cutoffTime),
+      promo: { enabled: s.promoEnabled, every: s.promoEvery },
+      payment: { qr: !!s.qrPayload, bank: !!(s.bankAccount || s.bankName) },
     };
   }
 
@@ -32,9 +35,17 @@ export class OrdersController {
     return this.orders.create(user, dto);
   }
 
+  /** Карта гостя «7-й кофе бесплатно». */
+  @Get('loyalty')
+  @Roles('PARTNER', 'GUEST', 'CLIENT')
+  loyalty(@CurrentUser() user: AuthUser) {
+    return this.orders.loyalty(user);
+  }
+
   /**
    * Список заказов. Партнёр видит свои, сотрудники — по своей роли.
-   * status можно передать через запятую: status=READY,SHIPPED; paid=true|false — по оплате.
+   * status можно передать через запятую: status=READY,SHIPPED; paid=true|false — по оплате;
+   * channel=CAFE|PARTNER; awaiting=true — ждут подтверждения.
    */
   @Get()
   list(
@@ -45,6 +56,9 @@ export class OrdersController {
     @Query('dateTo') dateTo?: string,
     @Query('search') search?: string,
     @Query('paid') paid?: string,
+    @Query('channel') channel?: string,
+    @Query('branchId') branchId?: string,
+    @Query('awaiting') awaiting?: string,
   ) {
     const statuses = status?.split(',').filter(Boolean) as OrderStatus[] | undefined;
     return this.orders.list(user, {
@@ -54,12 +68,36 @@ export class OrdersController {
       dateTo,
       search,
       paid: paid === 'true' ? true : paid === 'false' ? false : undefined,
+      channel: channel === 'CAFE' || channel === 'PARTNER' ? (channel as OrderChannel) : undefined,
+      branchId,
+      awaiting: awaiting === 'true',
     });
   }
 
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.orders.get(user, id);
+  }
+
+  /** Как оплатить: QR с суммой и реквизиты расчётного счёта. */
+  @Get(':id/payment')
+  payment(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.orders.payment(user, id);
+  }
+
+  /** «Я оплатил» — по желанию с фото чека (multipart, поле file). */
+  @Post(':id/paid')
+  @Roles('PARTNER', 'GUEST', 'CLIENT')
+  @UseInterceptors(photoUpload)
+  claimPaid(@CurrentUser() user: AuthUser, @Param('id') id: string, @UploadedFile() file?: Express.Multer.File) {
+    return this.orders.claimPaid(user, id, file ? publicUrl(file.filename) : undefined);
+  }
+
+  /** Подтвердить заказ после оплаты: дальше цех и списание в 1С. */
+  @Post(':id/confirm')
+  @Roles('ADMIN', 'MANAGER', 'ACCOUNTANT', 'CASHIER')
+  confirm(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ConfirmDto) {
+    return this.orders.confirm(user, id, dto);
   }
 
   @Patch(':id/items')
@@ -73,9 +111,9 @@ export class OrdersController {
     return this.orders.changeStatus(user, id, dto);
   }
 
-  /** Отметить оплату. Статус заказа не меняется. */
+  /** Деньги получены (наличные при доставке/выдаче, запоздалый перевод). */
   @Post(':id/payment')
-  @Roles('ADMIN', 'ACCOUNTANT')
+  @Roles('ADMIN', 'MANAGER', 'ACCOUNTANT', 'CASHIER')
   markPaid(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: PaymentDto) {
     return this.orders.markPaid(user, id, dto.paymentMethod, dto.comment);
   }

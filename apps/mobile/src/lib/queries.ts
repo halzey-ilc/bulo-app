@@ -1,22 +1,36 @@
 import { Addresses, Catalog, Notifications, Order, Orders, Product } from '../api';
 import { useAuth } from '../store/auth';
+import { usePrefs } from '../store/prefs';
 import { fetchCached, invalidate, peek, prefetch } from './cache';
 import { useCart } from '../store/cart';
 import { LoadOptions, useLoad } from './useLoad';
 
 /**
  * Единые ключи кэша и загрузчики. Цены зависят от пользователя, поэтому личные ключи — с его id.
+ * Меню кофейни зависит ещё и от филиала.
  */
 const uid = () => useAuth.getState().user?.id ?? 'anon';
 
+/** Филиал, по которому показываем меню: гостям и без входа — выбранный; партнёрам и офису — не нужен. */
+export function catalogBranch(): string | null {
+  const u = useAuth.getState().user;
+  if (u && (u.partnerId || (u.channel == null && u.role !== 'CASHIER'))) return null;
+  return usePrefs.getState().branchId;
+}
+const br = () => catalogBranch() ?? '-';
+
 export const Q = {
-  categories: () => ({ key: 'categories', fn: () => Catalog.categories() }),
+  categories: (b = br()) => ({ key: `categories:${b}`, fn: () => Catalog.categories(b === '-' ? null : b) }),
   info: () => ({ key: 'info', fn: () => Catalog.info() }),
   rules: () => ({ key: 'rules', fn: () => Orders.rules() }),
-  products: (u = uid()) => ({ key: `products:${u}`, fn: () => Catalog.products() }),
-  product: (id: string, u = uid()) => ({ key: `product:${id}:${u}`, fn: () => Catalog.product(id) }),
+  branches: () => ({ key: 'branches', fn: () => Catalog.branches() }),
+  stories: (u = uid()) => ({ key: `stories:${u}`, fn: () => Catalog.stories() }),
+  loyalty: (u = uid()) => ({ key: `loyalty:${u}`, fn: () => Orders.loyalty() }),
+  products: (u = uid(), b = br()) => ({ key: `products:${u}:${b}`, fn: () => Catalog.products({ branchId: b === '-' ? null : b }) }),
+  product: (id: string, u = uid(), b = br()) => ({ key: `product:${id}:${u}:${b}`, fn: () => Catalog.product(id, b === '-' ? null : b) }),
   orders: (u = uid()) => ({ key: `orders:${u}`, fn: () => Orders.list() }),
   order: (id: string) => ({ key: `order:${id}`, fn: () => Orders.get(id) }),
+  payment: (id: string) => ({ key: `payment:${id}`, fn: () => Orders.payment(id) }),
   notifications: (u = uid()) => ({ key: `notif:${u}`, fn: () => Notifications.list() }),
   addresses: (u = uid()) => ({ key: `addr:${u}`, fn: () => Addresses.list() }),
 };
@@ -54,7 +68,7 @@ export async function repriceCart() {
     useCart.getState().replace(
       useCart.getState().lines.map((l) => {
         const p = byId.get(l.productId);
-        return p ? { ...l, price: p.price, name: p.name, photoUrl: p.photoUrl } : l;
+        return p ? { ...l, price: p.price, name: p.name, photoUrl: p.photoUrl, promo: p.promo } : l;
       }),
     );
   } catch {

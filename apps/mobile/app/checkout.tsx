@@ -1,7 +1,11 @@
 import React, { useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
-import { Addresses, errorMessage, Orders } from '../src/api';
+import { Addresses, errorMessage, Orders, PaymentMethod, PickupSlot } from '../src/api';
+import { BranchChip, PaymentPicker, PickupPicker, usePromoPreview } from '../src/components/cafe';
+import { useBranch, useIsCafe } from '../src/lib/branch';
+import { invalidate } from '../src/lib/cache';
+import { returnAfterLogin } from '../src/lib/session';
 import { AddressPicker, PickedAddress } from '../src/components/delivery/MapPicker';
 import { Icon } from '../src/components/Icon';
 import { FadeIn } from '../src/components/motion';
@@ -19,6 +23,210 @@ import { toast } from '../src/store/ui';
 import { colors, fonts, radius, space } from '../src/theme';
 
 export default function Checkout() {
+  const cafe = useIsCafe();
+  return cafe ? <CafeCheckout /> : <PartnerCheckout />;
+}
+
+/** Бронь в кофейне: филиал, время самовывоза, оплата по QR или на кассе, подарок по акции. */
+function CafeCheckout() {
+  const lines = useCart((s) => s.lines);
+  const clear = useCart((s) => s.clear);
+  const user = useAuth((s) => s.user);
+  const uid = user?.id ?? 'anon';
+  const { branch } = useBranch();
+  const rules = useQuery(Q.rules(), { refetchOnFocus: false, staleTime: 10_000 });
+  const loyalty = useQuery(Q.loyalty(uid), { enabled: !!user, staleTime: 0 });
+  const [slot, setSlot] = useState<PickupSlot | null>(null);
+  const [method, setMethod] = useState<PaymentMethod>('QR');
+  const [comment, setComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const placed = useRef(false);
+  const qrReady = rules.data?.payment?.qr !== false;
+  const methods: PaymentMethod[] = qrReady ? ['QR', 'CASH'] : ['CASH'];
+  const pay = methods.includes(method) ? method : methods[0];
+
+  const gross = cartTotal(lines);
+  const promo = usePromoPreview(lines, user ? loyalty.data : null);
+  const total = Math.max(0, gross - promo.discount);
+
+  const submit = async () => {
+    setError(null);
+    if (!user) {
+      returnAfterLogin('/checkout');
+      router.push('/login');
+      return;
+    }
+    if (!branch) return setError('Выберите филиал');
+    if (!slot) return setError('Выберите, во сколько заберёте');
+    setSubmitting(true);
+    try {
+      const order = await Orders.create({
+        branchId: branch.id,
+        pickupAt: slot.at,
+        paymentMethod: pay,
+        comment: comment.trim() || undefined,
+        items: lines.map((l) => ({ productId: l.productId, qty: l.qty })),
+      });
+      placed.current = true;
+      hapticSuccess();
+      invalidateOrders();
+      invalidate('loyalty:');
+      setCached(Q.order(order.id).key, order);
+      router.replace({ pathname: '/order-success', params: { id: order.id, number: String(order.number), date: order.deliveryDate, cafe: '1', time: slot.time } });
+      setTimeout(() => clear(), 400);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!lines.length) {
+    if (placed.current) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+    return (
+      <View style={{ flex: 1 }}>
+        <Header title="Бронь" />
+        <EmptyState icon="bag" title="Корзина пуста" text="Добавьте кофе и выпечку из меню — и возвращайтесь." action="В меню" onAction={() => goTab('/catalog')} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <Header title="Бронь с собой" />
+      <Screen contentStyle={{ paddingBottom: 190, gap: space.xl }}>
+        <View style={{ gap: space.md }}>
+          <Step n={1} title="Где заберёте" />
+          <BranchChip />
+          {!!branch?.address && (
+            <T v="small" color={colors.textMuted}>
+              {branch.address} · {branch.opensAt}–{branch.closesAt}
+            </T>
+          )}
+        </View>
+
+        <View style={{ gap: space.md }}>
+          <Step n={2} title="Во сколько" />
+          <PickupPicker branch={branch} value={slot?.at ?? null} onChange={setSlot} />
+          <View style={styles.hint}>
+            <Icon name="clock" size={18} color={colors.cambodia} />
+            <T v="small" style={{ flex: 1, fontFamily: fonts.semibold }}>
+              Соберём к {slot?.time ?? 'выбранному времени'}. Бронь держим до закрытия филиала.
+            </T>
+          </View>
+        </View>
+
+        <View style={{ gap: space.md }}>
+          <Step n={3} title="Как оплатите" />
+          <PaymentPicker value={pay} onChange={setMethod} methods={methods} cafe />
+        </View>
+
+        <View style={{ gap: space.md }}>
+          <Step n={4} title="Пожелания" />
+          <Field multiline placeholder="Например: латте на овсяном, без сахара" value={comment} onChangeText={setComment} maxLength={1000} />
+        </View>
+
+        <Card style={{ gap: space.md }}>
+          <T v="h3">Ваша бронь</T>
+          {lines.map((l, i) => (
+            <View key={l.productId} style={{ gap: space.md }}>
+              {i > 0 && <Divider />}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
+                <ProductImage photoUrl={l.photoUrl} category={l.categoryName} seed={l.productId} style={{ width: 44, height: 44 }} iconSize={22} rounded={14} />
+                <View style={{ flex: 1 }}>
+                  <T v="bodyStrong" numberOfLines={1}>
+                    {l.name}
+                  </T>
+                  <T v="small" color={colors.textSoft}>
+                    {qtyText(l.qty, l.unit)} × {money(l.price)}
+                    {l.promo ? ' · ☕ штамп' : ''}
+                  </T>
+                </View>
+                <T v="bodyStrong">{money((l.price ?? 0) * l.qty)}</T>
+              </View>
+            </View>
+          ))}
+          {promo.free > 0 && (
+            <>
+              <Divider />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+                <Icon name="gift" size={18} color={colors.coffee} />
+                <T v="bodyStrong" color={colors.coffee} style={{ flex: 1 }}>
+                  {promo.free === 1 ? 'Кофе в подарок' : `Кофе в подарок: ${promo.free}`}
+                </T>
+                <T v="bodyStrong" color={colors.coffee}>
+                  −{money(promo.discount)}
+                </T>
+              </View>
+            </>
+          )}
+          <Divider />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <T v="h3">Итого</T>
+            <T v="h3" color={colors.mango}>
+              {money(total)}
+            </T>
+          </View>
+        </Card>
+
+        {user && loyalty.data?.enabled && promo.free === 0 && lines.some((l) => l.promo) && (
+          <View style={[styles.hint, { backgroundColor: colors.coffeeSoft }]}>
+            <Icon name="gift" size={18} color={colors.coffee} />
+            <T v="small" color={colors.coffee} style={{ flex: 1, fontFamily: fonts.semibold }}>
+              После этой брони в карте будет {Math.min(loyalty.data.every - 1, loyalty.data.stamps + lines.filter((l) => l.promo).reduce((s, l) => s + Math.floor(l.qty), 0))} из {loyalty.data.every} штампов
+            </T>
+          </View>
+        )}
+        {!user && (
+          <View style={[styles.hint, { backgroundColor: colors.iceCube }]}>
+            <Icon name="phone" size={18} color={colors.blueberry} />
+            <T v="small" color={colors.blueberry} style={{ flex: 1, fontFamily: fonts.semibold }}>
+              Чтобы забронировать, войдите по номеру телефона — это 20 секунд. Корзина сохранится.
+            </T>
+          </View>
+        )}
+      </Screen>
+
+      <BottomBar>
+        {error && (
+          <View style={styles.error}>
+            <Icon name="info" size={18} color={colors.danger} />
+            <T v="small" color={colors.danger} style={{ flex: 1, fontFamily: fonts.semibold }}>
+              {error}
+            </T>
+          </View>
+        )}
+        <Button
+          title={user ? (pay === 'QR' ? 'Забронировать и оплатить' : 'Забронировать') : 'Войти и забронировать'}
+          loading={submitting}
+          disabled={!!user && !slot}
+          onPress={submit}
+          right={
+            <T v="small" color="rgba(255,255,255,0.85)" style={{ fontFamily: fonts.bold }}>
+              · {money(total)}
+            </T>
+          }
+        />
+      </BottomBar>
+    </View>
+  );
+}
+
+function Step({ n, title }: { n: number; title: string }) {
+  return (
+    <View style={styles.stepTitle}>
+      <View style={styles.stepNum}>
+        <T v="caption" color={colors.white} style={{ fontFamily: fonts.extrabold }}>
+          {n}
+        </T>
+      </View>
+      <T v="h2">{title}</T>
+    </View>
+  );
+}
+
+function PartnerCheckout() {
   const lines = useCart((s) => s.lines);
   const clear = useCart((s) => s.clear);
   const cartDate = useCart((s) => s.deliveryDate);
@@ -29,7 +237,13 @@ export default function Checkout() {
   const cutoff = useCutoff(rules.data, 14);
   const [addressId, setAddressId] = useState<string | null>(null);
   const [comment, setComment] = useState('');
+  const [method, setMethod] = useState<PaymentMethod>('QR');
   const [submitting, setSubmitting] = useState(false);
+  const partnerMethods: PaymentMethod[] = [
+    ...(rules.data?.payment?.qr !== false ? (['QR'] as const) : []),
+    'BANK',
+    'CASH',
+  ];
   const placed = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,6 +298,7 @@ export default function Checkout() {
       const order = await Orders.create({
         deliveryDate: date,
         addressId,
+        paymentMethod: partnerMethods.includes(method) ? method : 'BANK',
         comment: comment.trim() || undefined,
         items: lines.map((l) => ({ productId: l.productId, qty: l.qty })),
       });
@@ -229,16 +444,15 @@ export default function Checkout() {
           )}
         </View>
 
+        {/* Оплата */}
+        <View style={{ gap: space.md }}>
+          <Step n={3} title="Как оплатите" />
+          <PaymentPicker value={partnerMethods.includes(method) ? method : 'BANK'} onChange={setMethod} methods={partnerMethods} />
+        </View>
+
         {/* Комментарий */}
         <View style={{ gap: space.md }}>
-          <View style={styles.stepTitle}>
-            <View style={styles.stepNum}>
-              <T v="caption" color={colors.white} style={{ fontFamily: fonts.extrabold }}>
-                3
-              </T>
-            </View>
-            <T v="h2">Пожелания</T>
-          </View>
+          <Step n={4} title="Пожелания" />
           <Field multiline placeholder="Например: привезти до 8:00, вход со двора" value={comment} onChangeText={setComment} maxLength={1000} />
         </View>
 
@@ -279,7 +493,9 @@ export default function Checkout() {
         <View style={[styles.hint, { backgroundColor: colors.iceCube }]}>
           <Icon name="card" size={18} color={colors.blueberry} />
           <T v="small" color={colors.blueberry} style={{ flex: 1, fontFamily: fonts.semibold }}>
-            Заказ сразу уйдёт в цех. Как оплатить — подскажет менеджер, оплатить можно и после доставки.
+            {method === 'CASH'
+              ? 'Менеджер подтвердит заказ — и он уйдёт в цех. Оплата наличными курьеру.'
+              : 'После оформления покажем, как оплатить. Как только оплата придёт, менеджер подтвердит заказ — и он уйдёт в цех.'}
           </T>
         </View>
       </Screen>

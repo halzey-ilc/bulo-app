@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg';
@@ -37,6 +37,100 @@ export function weekStartIso() {
 
 function firstName(name?: string | null) {
   return (name || '').split(/\s+/)[0] || '';
+}
+
+type RKey = 'today' | 'week' | 'month';
+
+/** Выручка: кофейня (по филиалам) и партнёры — сегодня, 7 дней, месяц. */
+export function RevenueCard() {
+  const rev = useLoad(() => Admin.revenue(), []);
+  const [k, setK] = useState<RKey>('today');
+  useAutoRefresh(() => rev.reload(), 60000);
+  const p = rev.data?.[k];
+  const total = p?.total ?? 0;
+  const cafeShare = total ? (p!.cafe.total / total) * 100 : 0;
+  return (
+    <Group>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <T v="h3">Выручка</T>
+        <View style={st.rtabs}>
+          {(
+            [
+              ['today', 'Сегодня'],
+              ['week', '7 дней'],
+              ['month', 'Месяц'],
+            ] as [RKey, string][]
+          ).map(([key, label]) => (
+            <Touchable key={key} haptic onPress={() => setK(key)} style={[st.rtab, k === key && st.rtabOn]}>
+              <T v="caption" color={k === key ? colors.white : colors.textMuted} style={{ fontFamily: fonts.bold }}>
+                {label}
+              </T>
+            </Touchable>
+          ))}
+        </View>
+      </View>
+      {rev.loading || !p ? (
+        <Skeleton style={{ height: 170 }} />
+      ) : (
+        <>
+          <T style={{ fontFamily: fonts.extrabold, fontSize: 30, lineHeight: 36, letterSpacing: -0.5 }}>{money(total) || '0 сом'}</T>
+          <View style={st.split}>
+            <View style={{ width: `${cafeShare}%`, backgroundColor: colors.coffee }} />
+            <View style={{ flex: 1, backgroundColor: colors.mango }} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: space.sm }}>
+            <Touchable style={[st.rtile, { backgroundColor: colors.coffeeSoft }]} onPress={() => router.navigate({ pathname: '/orders', params: { f: 'all' } })}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <AIcon name="coffee" size={16} color={colors.coffee} strokeWidth={2} />
+                <T v="caption" color={colors.coffee} style={{ fontFamily: fonts.extrabold }}>
+                  КОФЕЙНЯ
+                </T>
+              </View>
+              <T v="h2" color={colors.coffee}>
+                {money(p.cafe.total) || '0 сом'}
+              </T>
+              <T v="small" color={colors.textMuted}>
+                {p.cafe.orders} {plural(p.cafe.orders, 'бронь', 'брони', 'броней')}
+                {p.cafe.freeCoffees ? ` · 🎁 ${p.cafe.freeCoffees}` : ''}
+              </T>
+            </Touchable>
+            <Touchable style={[st.rtile, { backgroundColor: colors.primarySoft }]} onPress={() => router.push('/admin/reports')}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <AIcon name="handshake" size={16} color={colors.mango} strokeWidth={2} />
+                <T v="caption" color={colors.mango} style={{ fontFamily: fonts.extrabold }}>
+                  ПАРТНЁРЫ
+                </T>
+              </View>
+              <T v="h2" color={colors.mango}>
+                {money(p.partners.total) || '0 сом'}
+              </T>
+              <T v="small" color={colors.textMuted}>
+                {p.partners.orders} {plural(p.partners.orders, 'заказ', 'заказа', 'заказов')}
+                {p.partners.unpaid ? ` · долг ${moneyShort(p.partners.unpaid)}` : ''}
+              </T>
+            </Touchable>
+          </View>
+          {p.byBranch.length > 0 && (
+            <View style={{ gap: 6 }}>
+              {p.byBranch.map((b) => (
+                <View key={b.branchId} style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+                  <T v="small" style={{ width: 90, fontFamily: fonts.semibold }} numberOfLines={1}>
+                    {b.name}
+                  </T>
+                  <View style={{ flex: 1 }}>
+                    <ShareBar value={b.total} max={Math.max(...p.byBranch.map((x) => x.total), 1)} color={colors.coffee} />
+                  </View>
+                  <T v="small" style={{ fontFamily: fonts.bold }}>
+                    {moneyShort(b.total)}
+                  </T>
+                </View>
+              ))}
+            </View>
+          )}
+        </>
+      )}
+    </Group>
+  );
 }
 
 /* ───────────────── Админ и менеджер ───────────────── */
@@ -117,29 +211,40 @@ export function OfficeDashboard() {
             </View>
           </Touchable>
 
+          {/* Выручка: кофейня и партнёры */}
+          <RevenueCard />
+
           {/* KPI */}
           <View style={st.grid}>
             <KpiCard
               style={st.cell}
-              icon="sparkle"
+              icon="check"
               tone={d.newOrders ? 'mango' : 'white'}
               pulse={d.newOrders > 0}
               value={d.newOrders}
-              label="Новые заказы"
-              sub={d.newOrders ? 'Нужно одобрить' : 'Всё разобрано'}
-              onPress={() => go('new')}
+              label="Подтвердить"
+              sub={d.newOrders ? (d.claimed ? `${d.claimed} уже оплатили` : 'Ждут оплаты') : 'Всё подтверждено'}
+              onPress={() => go('confirm')}
             />
+            <KpiCard
+              style={st.cell}
+              icon="coffee"
+              tone={d.cafeActive ? 'pink' : 'white'}
+              value={d.cafeActive ?? 0}
+              label="Брони кофейни"
+              sub={d.cafeActive ? 'Собрать и выдать' : 'Сейчас нет'}
+              onPress={() => go('cafe')}
+            />
+            <KpiCard style={st.cell} icon="chef" tone="white" value={d.paid + d.inProduction} label="В цеху" sub={d.paid ? `${d.paid} оплачено, ждут цех` : 'Цех работает'} onPress={() => go('work')} />
             <KpiCard
               style={st.cell}
               icon="card"
               tone="yellow"
               value={d.awaitingPayment.count}
-              label="Ждут оплаты"
-              sub={money(d.awaitingPayment.total) || '—'}
-              onPress={() => go('approved')}
+              label="Не оплачены"
+              sub={d.awaitingPayment.count ? `${money(d.awaitingPayment.total)} · наличные` : 'Долгов нет'}
+              onPress={() => go('debt')}
             />
-            <KpiCard style={st.cell} icon="chef" tone="white" value={d.paid + d.inProduction} label="В производстве" sub={d.paid ? `${d.paid} оплачено, ждут цех` : 'Цех работает'} onPress={() => go('work')} />
-            <KpiCard style={st.cell} icon="box" tone="green" value={d.ready} label="Готовы" sub="К отгрузке" onPress={() => go('ready')} />
             <KpiCard
               style={st.cell}
               icon="handshake"
@@ -176,6 +281,8 @@ export function OfficeDashboard() {
               <Quick icon="handshake" label={'Добавить\nпартнёра'} tone={colors.iceCube} fg={colors.blueberry} onPress={() => router.navigate({ pathname: '/people', params: { seg: 'partners', create: '1' } })} />
               <Quick icon="doc" label={'Сводная\nнакладная'} tone={colors.softYellow} fg="#8A5A00" onPress={() => router.push('/admin/production')} />
               <Quick icon="tag" label={'Каталог\nи цены'} tone={colors.primarySoft} fg={colors.mango} onPress={() => router.push('/admin/catalog')} />
+              <Quick icon="image" label={'Истории\nна главной'} tone={colors.coffeeSoft} fg={colors.coffee} onPress={() => router.push('/admin/stories')} />
+              <Quick icon="coffee" label={'Филиалы\nи меню'} tone={colors.softYellow} fg={colors.coffee} onPress={() => router.push('/admin/branches')} />
               <Quick icon="chart" label={'Отчёты\nи Excel'} tone="#E6EBC4" fg={colors.cambodia} onPress={() => router.push('/admin/reports')} />
               <Quick icon="settings" label={'Настройки'} tone={colors.white} fg={colors.cambodia} onPress={() => router.push('/admin/settings')} />
             </ScrollView>
@@ -502,11 +609,12 @@ function isTodayTs(ts: string) {
 export function topDebtors(rows: DebtRow[], limit = 5) {
   const m = new Map<string, { partnerId: string; name: string; total: number; count: number; oldest: string; phone: string | null }>();
   for (const r of rows) {
-    const p = m.get(r.partnerId) ?? { partnerId: r.partnerId, name: r.partner, total: 0, count: 0, oldest: r.deliveryDate, phone: r.phone };
+    const key = r.partnerId ?? `guest:${r.partner}`;
+    const p = m.get(key) ?? { partnerId: key, name: r.partner, total: 0, count: 0, oldest: r.deliveryDate, phone: r.phone };
     p.total += r.total;
     p.count++;
     if (r.deliveryDate < p.oldest) p.oldest = r.deliveryDate;
-    m.set(r.partnerId, p);
+    m.set(key, p);
   }
   return [...m.values()].sort((a, b) => b.total - a.total).slice(0, limit);
 }
@@ -562,6 +670,11 @@ function Stat({ label, value, color, bg }: { label: string; value: number; color
 export type { DashboardData };
 
 const st = StyleSheet.create({
+  rtabs: { flexDirection: "row", backgroundColor: colors.oatMilk, borderRadius: 999, padding: 3, gap: 2 },
+  rtab: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
+  rtabOn: { backgroundColor: colors.cambodia },
+  split: { flexDirection: "row", height: 8, borderRadius: 4, overflow: "hidden", backgroundColor: colors.oatMilk },
+  rtile: { flex: 1, borderRadius: radius.lg, padding: space.md, gap: 2 },
   hero: { backgroundColor: colors.cambodia, borderRadius: radius.xxl, padding: space.xl, overflow: 'hidden', ...shadows.card },
   heroBadge: { width: 28, height: 28, borderRadius: 10, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center' },
   heroCta: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.lime, paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.pill },

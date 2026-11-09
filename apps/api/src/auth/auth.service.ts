@@ -34,10 +34,8 @@ export class AuthService {
 
   async requestOtp(dto: RequestOtpDto, current?: AuthUser) {
     const phone = this.phoneOrThrow(dto.phone);
-    const existing = await this.prisma.user.findUnique({ where: { phone } });
-    if (dto.purpose === 'LOGIN' && !existing) {
-      throw new NotFoundException('Номер не найден. Подайте заявку партнёра или обратитесь к администратору');
-    }
+    const existing = await this.prisma.user.findUnique({ where: { phone }, include: { partner: true } });
+    // новый номер при входе — это гость кофейни: после кода спросим имя и создадим аккаунт
     if (dto.purpose === 'REGISTER' && existing) {
       throw new ConflictException('Этот номер уже зарегистрирован — войдите');
     }
@@ -45,16 +43,57 @@ export class AuthService {
       if (!current) throw new UnauthorizedException('Требуется вход');
       if (existing) throw new ConflictException('Этот номер уже используется');
     }
-    if (existing) this.assertCanLogin(existing as AuthUser);
-    return { sent: true, phone, ...(await this.otp.send(phone, dto.purpose)) };
+    if (existing) this.assertCanLogin(existing);
+    return {
+      sent: true,
+      phone,
+      isNew: dto.purpose === 'LOGIN' && !existing,
+      name: existing?.name ?? null,
+      ...(await this.otp.send(phone, dto.purpose)),
+    };
   }
 
-  async loginWithOtp(rawPhone: string, code: string) {
+  /** Вход по коду. Нового гостя регистрируем сразу (нужно имя) — без заявок и ожидания. */
+  async loginWithOtp(rawPhone: string, code: string, name?: string) {
     const phone = this.phoneOrThrow(rawPhone);
+    let user = await this.prisma.user.findUnique({ where: { phone }, include: { partner: true } });
+    const cleanName = name?.trim();
+    // имя проверяем до кода, чтобы не «сжечь» код
+    if (!user && (!cleanName || cleanName.length < 2)) throw new BadRequestException('Как вас зовут? Напишите имя');
     await this.otp.verify(phone, 'LOGIN', code);
-    const user = await this.prisma.user.findUnique({ where: { phone }, include: { partner: true } });
-    if (!user) throw new NotFoundException('Пользователь не найден');
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: { phone, name: cleanName!, role: 'CLIENT', canOrder: true },
+        include: { partner: true },
+      });
+      await this.audit.log(user.id, 'client.register', 'User', user.id);
+    }
     return this.issue(user);
+  }
+
+  /** Удаление аккаунта по просьбе пользователя (требование App Store и Google Play): обезличиваем и закрываем вход. */
+  async deleteAccount(user: AuthUser) {
+    if (user.role !== 'CLIENT' && user.role !== 'PARTNER' && user.role !== 'GUEST') {
+      throw new ForbiddenException('Аккаунт сотрудника удаляет администратор');
+    }
+    await this.prisma.$transaction([
+      this.prisma.pushToken.deleteMany({ where: { userId: user.id } }),
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          phone: null,
+          login: null,
+          email: null,
+          passwordHash: null,
+          name: 'Удалённый пользователь',
+          status: 'BLOCKED',
+          deletedAt: new Date(),
+          tokenVersion: { increment: 1 },
+        },
+      }),
+    ]);
+    await this.audit.log(user.id, 'user.delete_self', 'User', user.id);
+    return { ok: true };
   }
 
   async loginWithPassword(login: string, password: string) {

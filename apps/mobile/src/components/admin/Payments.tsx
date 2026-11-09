@@ -266,7 +266,7 @@ const QueueRow = memo(function QueueRow({ o, today, onPay }: { o: OfficeOrder; t
       </Touchable>
       <View style={{ flexDirection: 'row', gap: space.sm }}>
         {!!o.partner?.phone && (
-          <Touchable haptic onPress={() => callPhone(o.partner.phone!)} style={st.call} accessibilityLabel="Позвонить">
+          <Touchable haptic onPress={() => callPhone(o.partner!.phone!)} style={st.call} accessibilityLabel="Позвонить">
             <AIcon name="phone" size={20} color={colors.cambodia} />
           </Touchable>
         )}

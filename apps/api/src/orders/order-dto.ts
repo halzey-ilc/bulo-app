@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsNumber,
   IsOptional,
@@ -29,9 +30,10 @@ export class CreateOrderDto {
   @Type(() => OrderItemInput)
   items: OrderItemInput[];
 
-  /** YYYY-MM-DD */
+  /** Партнёр: дата доставки YYYY-MM-DD */
+  @IsOptional()
   @IsString()
-  deliveryDate: string;
+  deliveryDate?: string;
 
   @IsOptional()
   @IsString()
@@ -40,6 +42,37 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   @MaxLength(1000)
+  comment?: string;
+
+  /** QR | BANK | CASH */
+  @IsOptional()
+  @IsIn(['QR', 'BANK', 'CASH'])
+  paymentMethod?: 'QR' | 'BANK' | 'CASH';
+
+  /** Гость кофейни: филиал и время самовывоза (ISO) */
+  @IsOptional()
+  @IsString()
+  branchId?: string;
+
+  @IsOptional()
+  @IsString()
+  pickupAt?: string;
+}
+
+export class ConfirmDto {
+  /** Можно уточнить способ оплаты при подтверждении */
+  @IsOptional()
+  @IsIn(['QR', 'BANK', 'CASH'])
+  paymentMethod?: 'QR' | 'BANK' | 'CASH';
+
+  /** Наличные: деньги уже получены (иначе — получим при выдаче или доставке) */
+  @IsOptional()
+  @IsBoolean()
+  paid?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
   comment?: string;
 }
 
@@ -71,6 +104,11 @@ export class StatusDto {
   @IsString()
   @MaxLength(80)
   receivedBy?: string;
+
+  /** Для DELIVERED: курьер получил наличные */
+  @IsOptional()
+  @IsBoolean()
+  cashReceived?: boolean;
 }
 
 export class PaymentDto {
@@ -88,8 +126,9 @@ export class PaymentDto {
 
 export const orderInclude = {
   partner: { include: { priceType: true } },
+  branch: { select: { id: true, name: true, address: true, phone: true, lat: true, lng: true } },
   items: { include: { product: { include: { category: true } } } },
-  createdBy: { select: { id: true, name: true, role: true } },
+  createdBy: { select: { id: true, name: true, role: true, phone: true } },
   courier: { select: { id: true, name: true, phone: true } },
   history: {
     orderBy: { createdAt: 'asc' },
@@ -100,11 +139,18 @@ export const orderInclude = {
 export type FullOrder = Prisma.OrderGetPayload<{ include: typeof orderInclude }>;
 
 /** Заказ для ответа API: Decimal → number, дата доставки → YYYY-MM-DD. */
+/** Кто покупатель: название партнёра или имя гостя. */
+export function buyerName(o: { partner: { name: string } | null; createdBy?: { name: string | null } | null }) {
+  return o.partner?.name ?? o.createdBy?.name ?? 'Гость';
+}
+
 export function serializeOrder(o: FullOrder) {
   return {
     ...o,
+    buyer: buyerName(o),
     deliveryDate: fromDbDate(o.deliveryDate),
     total: Number(o.total),
+    discount: Number(o.discount),
     items: o.items.map((i) => ({
       id: i.id,
       productId: i.productId,
@@ -113,6 +159,8 @@ export function serializeOrder(o: FullOrder) {
       qty: Number(i.qty),
       price: Number(i.price),
       sum: Number(i.sum),
+      promo: i.promo,
+      freeQty: i.freeQty,
       photoUrl: i.product.photoUrl,
       category: i.product.category.name,
       multiplicity: Number(i.product.multiplicity),

@@ -2,6 +2,8 @@ import React, { memo, useEffect, useRef, useState } from 'react';
 import { Animated, Platform, StyleSheet, View } from 'react-native';
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsCafe } from '../lib/branch';
+import { useAuth } from '../store/auth';
 import { useCartCount } from '../store/cart';
 import { useUi } from '../store/ui';
 import { colors, fonts, shadows } from '../theme';
@@ -45,6 +47,8 @@ export function TabBar({
   const focusedIdx = routes.findIndex((r) => r.name === focusedName);
   const pos = useRef(new Animated.Value(Math.max(0, focusedIdx))).current;
   const cartFocused = focusedName === 'cart';
+  const cafeMenu = useIsCafe();
+  const cashierTab = useAuth((s) => s.user?.role === 'CASHIER');
 
   useEffect(() => {
     if (focusedIdx >= 0) Animated.spring(pos, { toValue: focusedIdx, useNativeDriver: true, speed: 16, bounciness: 7 }).start();
@@ -85,7 +89,7 @@ export function TabBar({
         {routes.map((route) => {
           const focused = route.name === focusedName;
           const meta = TAB_META[route.name] ?? { icon: 'info', label: route.name };
-          const label = route.name === 'profile' ? profileLabel : meta.label;
+          const label = route.name === 'profile' ? profileLabel : route.name === 'catalog' && cafeMenu ? 'Меню' : route.name === 'orders' && cashierTab ? 'Брони' : meta.label;
           if (route.name === 'cart') {
             return <CartTab key={route.key} focused={focused} onPress={() => press(route.key, focused)} />;
           }

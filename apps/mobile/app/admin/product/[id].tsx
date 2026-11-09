@@ -37,7 +37,7 @@ const num = (s: string) => {
 /** Карточка товара для офиса: фото, описание, кратность, цены по типам. */
 export default function ProductEditor() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  /** Кассир: только наличие, фото и розничная цена */
+  /** Кассир: только «есть / нет в наличии». Товары, фото и цены ведут админ и менеджер */
   const cashier = useAuth((s) => s.user?.role) === 'CASHIER';
   const products = useLoad(() => Admin.products(), []);
   const types = useLoad(() => Admin.priceTypes(), []);
@@ -179,7 +179,7 @@ export default function ProductEditor() {
               </View>
             </View>
           )}
-          <View style={st.photoBtns}>
+          {!cashier && <View style={st.photoBtns}>
             <Touchable haptic onPress={() => pick(false)} style={st.photoBtn} disabled={!!upload}>
               <AIcon name="image" size={18} color={colors.cambodia} />
               <T v="small" style={{ fontFamily: fonts.extrabold }}>
@@ -194,7 +194,7 @@ export default function ProductEditor() {
                 </T>
               </Touchable>
             )}
-          </View>
+          </View>}
         </View>
         <T v="small" color={colors.textSoft} center>
           Квадратное фото JPG, PNG или WebP до 8 МБ
@@ -205,8 +205,8 @@ export default function ProductEditor() {
           {!cashier && <ToggleRow icon="sparkle" title="Новинка" subtitle="Плашка NEW и подборка на главной" value={form.isNew} onChange={(v) => set('isNew', v)} />}
         </Group>
 
-        <Label>{cashier ? 'Розничная цена, сом' : 'Цены, сом'}</Label>
-        <Group>
+        {!cashier && <Label>Цены, сом</Label>}
+        {!cashier && <Group>
           {types.loading ? (
             <Skeleton style={{ height: 120 }} />
           ) : (
@@ -225,8 +225,8 @@ export default function ProductEditor() {
               </View>
             ))
           )}
-          <Note text={cashier ? 'Розничную цену видят покупатели. Партнёрские цены меняет администратор.' : 'Пустое поле — у этого типа цен товара не будет, такие партнёры не смогут его заказать.'} />
-        </Group>
+          <Note text="«Кофейня …» — цена в меню филиала, остальные — для партнёров. Пустое поле — в этом меню или для этих партнёров товара нет." />
+        </Group>}
 
         {!cashier && <Label>Описание</Label>}
         {!cashier && (

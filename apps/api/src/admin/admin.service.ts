@@ -264,17 +264,20 @@ export class AdminService {
 
   async dashboard() {
     const today = localNow().date;
-    const [newOrders, awaitingPayment, paid, inProduction, ready, pendingPartners, todayOrders, onecErrors] =
+    const [newOrders, claimed, awaitingPayment, paid, inProduction, ready, pendingPartners, todayOrders, onecErrors, cafeActive] =
       await Promise.all([
-        this.prisma.order.count({ where: { status: 'NEW' } }),
+        // ждут подтверждения админом/менеджером
+        this.prisma.order.count({ where: { status: 'NEW', confirmedAt: null } }),
+        this.prisma.order.count({ where: { status: 'NEW', confirmedAt: null, paymentClaimedAt: { not: null } } }),
+        // подтверждены, но деньги ещё не получены (наличные при доставке/выдаче)
         this.prisma.order.aggregate({
-          where: { paidAt: null, status: { notIn: ['REJECTED', 'CANCELLED'] } },
+          where: { paidAt: null, status: { notIn: ['NEW', 'REJECTED', 'CANCELLED'] } },
           _count: true,
           _sum: { total: true },
         }),
         this.prisma.order.count({ where: { paidAt: { not: null }, status: { notIn: ['DELIVERED', 'REJECTED', 'CANCELLED'] } } }),
         this.prisma.order.count({ where: { status: 'IN_PRODUCTION' } }),
-        this.prisma.order.count({ where: { status: 'READY' } }),
+        this.prisma.order.count({ where: { status: 'READY', channel: 'PARTNER' } }),
         this.prisma.partner.count({ where: { status: 'PENDING' } }),
         this.prisma.order.aggregate({
           where: { deliveryDate: toDbDate(today), status: { notIn: ['REJECTED', 'CANCELLED'] } },
@@ -282,10 +285,14 @@ export class AdminService {
           _sum: { total: true },
         }),
         this.prisma.oneCDocument.count({ where: { status: 'ERROR' } }),
+        // брони кофейни, которые сейчас собирают или ждут гостя
+        this.prisma.order.count({ where: { channel: 'CAFE', status: { in: ['PAID', 'READY'] } } }),
       ]);
     return {
       today,
       newOrders,
+      claimed,
+      cafeActive,
       awaitingPayment: { count: awaitingPayment._count, total: Number(awaitingPayment._sum.total ?? 0) },
       paid,
       inProduction,

@@ -1,6 +1,3 @@
-import { randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
-import { extname, join } from 'node:path';
 import {
   BadRequestException,
   Body,
@@ -15,7 +12,6 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
@@ -30,11 +26,11 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { diskStorage } from 'multer';
 import { AuditService } from '../common/audit.service';
 import { AuthUser } from '../common/auth-user';
 import { CurrentUser, Roles } from '../common/decorators';
 import { PrismaService } from '../common/prisma.service';
+import { photoUpload, publicUrl } from '../common/upload';
 import { CatalogService } from './catalog.service';
 
 class CategoryDto {
@@ -42,6 +38,8 @@ class CategoryDto {
   @IsOptional() @IsString() workshopArea?: string;
   @IsOptional() @IsInt() sortOrder?: number;
   @IsOptional() @IsBoolean() visible?: boolean;
+  @IsOptional() @IsString() section?: string;
+  @IsOptional() @IsBoolean() promoCoffee?: boolean;
 }
 
 class UpdateCategoryDto {
@@ -49,6 +47,8 @@ class UpdateCategoryDto {
   @IsOptional() @IsString() workshopArea?: string;
   @IsOptional() @IsInt() sortOrder?: number;
   @IsOptional() @IsBoolean() visible?: boolean;
+  @IsOptional() @IsString() section?: string;
+  @IsOptional() @IsBoolean() promoCoffee?: boolean;
 }
 
 class ProductDto {
@@ -96,22 +96,10 @@ class UpdatePriceTypeDto {
   @IsOptional() @IsBoolean() isRetail?: boolean;
 }
 
-const UPLOAD_DIR = join(process.cwd(), 'uploads');
-mkdirSync(UPLOAD_DIR, { recursive: true });
-
-const photoUpload = FileInterceptor('file', {
-  storage: diskStorage({
-    destination: UPLOAD_DIR,
-    filename: (_req, file, cb) => cb(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`),
-  }),
-  limits: { fileSize: 8 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) =>
-    cb(null, /^image\/(jpeg|png|webp)$/.test(file.mimetype)),
-});
-
-const publicUrl = (file: string) => `${process.env.PUBLIC_URL ?? ''}/uploads/${file}`;
-
-/** Кассир добавляет и убирает товары, ставит фото и розничные цены. Партнёрские цены и категории ему недоступны. */
+/**
+ * Товары, фото, цены и истории ведут админ и менеджер.
+ * Кассир видит каталог и только отмечает «нет в наличии» / «снова есть».
+ */
 const CATALOG_STAFF = ['ADMIN', 'MANAGER', 'CASHIER'] as const;
 
 /** Управление каталогом: категории, товары, фото, цены, видимость. */
@@ -163,7 +151,6 @@ export class CatalogAdminController {
   }
 
   @Post('products')
-  @Roles(...CATALOG_STAFF)
   async createProduct(@CurrentUser() user: AuthUser, @Body() dto: CreateProductDto) {
     const p = await this.prisma.product.create({ data: dto });
     await this.audit.log(user.id, 'product.create', 'Product', p.id);
@@ -185,7 +172,6 @@ export class CatalogAdminController {
   }
 
   @Post('products/:id/photo')
-  @Roles(...CATALOG_STAFF)
   @UseInterceptors(photoUpload)
   async uploadPhoto(@CurrentUser() user: AuthUser, @Param('id') id: string, @UploadedFile() file?: Express.Multer.File) {
     if (!file) throw new BadRequestException('Загрузите изображение JPG, PNG или WebP до 8 МБ');
@@ -196,7 +182,6 @@ export class CatalogAdminController {
 
   /** Удалить товар. Если его уже заказывали, товар только скрывается, чтобы не ломать историю заказов. */
   @Delete('products/:id')
-  @Roles(...CATALOG_STAFF)
   async deleteProduct(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     const used = await this.prisma.orderItem.count({ where: { productId: id } });
     if (used) {
@@ -210,15 +195,7 @@ export class CatalogAdminController {
   }
 
   @Put('products/:id/prices')
-  @Roles(...CATALOG_STAFF)
   async setPrices(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: PricesDto) {
-    if (user.role === 'CASHIER') {
-      const retail = await this.prisma.priceType.findMany({ where: { isRetail: true }, select: { id: true } });
-      const allowed = new Set(retail.map((t) => t.id));
-      if (dto.items.some((i) => !allowed.has(i.priceTypeId))) {
-        throw new ForbiddenException('Кассир меняет только розничные цены');
-      }
-    }
     await this.prisma.$transaction(
       dto.items.map((i) =>
         i.price == null

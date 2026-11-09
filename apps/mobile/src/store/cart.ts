@@ -10,6 +10,8 @@ export interface CartLine {
   price: number | null;
   photoUrl: string | null;
   categoryName?: string;
+  /** Кофе по акции «7-й бесплатно» */
+  promo?: boolean;
   qty: number;
 }
 

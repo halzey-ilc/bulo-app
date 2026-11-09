@@ -52,7 +52,7 @@ function defaultFilter(role: Role | undefined, persona: string) {
 // Офис (админ/менеджер) — отдельный экран разбора заказов.
 export default function OrdersTab() {
   const persona = usePersona();
-  return isOffice(persona) ? <OfficeOrders /> : persona === 'buyer' ? <BuyerOrders /> : <OrdersScreen />;
+  return isOffice(persona) || persona === 'cashier' ? <OfficeOrders /> : persona === 'buyer' ? <BuyerOrders /> : <OrdersScreen />;
 }
 
 function OrdersScreen() {

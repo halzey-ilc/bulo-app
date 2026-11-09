@@ -14,6 +14,9 @@ interface PrefsState {
   onboardingSeen: boolean;
   /** Просмотренные истории: ключ группы → «подпись» содержимого (новые слайды снова подсвечивают кружок) */
   seenStories: Record<string, string>;
+  /** Выбранный филиал кофейни (для гостей и без входа) */
+  branchId: string | null;
+  setBranch: (id: string | null) => void;
   markStorySeen: (key: string, sig: string) => void;
   toggleFavorite: (productId: string) => boolean;
   pushSearch: (q: string) => void;
@@ -33,6 +36,8 @@ export const usePrefs = create<PrefsState>()(
       loginTab: 'phone',
       onboardingSeen: false,
       seenStories: {},
+      branchId: null,
+      setBranch: (branchId) => set({ branchId }),
       markStorySeen: (key, sig) => set({ seenStories: { ...get().seenStories, [key]: sig } }),
       toggleFavorite: (id) => {
         const has = get().favorites.includes(id);

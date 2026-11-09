@@ -37,7 +37,7 @@ export default function OrderEditScreen() {
   const [q, setQ] = useState('');
 
   const o = order.data;
-  const ptId = o?.partner?.priceTypeId ?? null;
+  const ptId = (o?.partner as { priceTypeId?: string | null } | null)?.priceTypeId ?? null;
   const priceOf = (p: AdminProduct) => (p.prices.find((x) => x.priceTypeId === ptId) ?? (ptId ? undefined : p.prices.find((x) => x.priceType.isDefault)))?.price ?? null;
 
   useEffect(() => {

@@ -24,7 +24,7 @@ import { colors } from '../src/theme';
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 /** Общие для всех публичные данные — их не чистим при смене пользователя. */
-const PUBLIC_KEYS = (k: string) => k === 'categories' || k === 'info' || k === 'rules';
+const PUBLIC_KEYS = (k: string) => k === 'info' || k === 'rules' || k === 'branches';
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({

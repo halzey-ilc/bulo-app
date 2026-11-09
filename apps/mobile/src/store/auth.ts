@@ -88,11 +88,11 @@ export const isOffice = (p: Persona) => p === 'admin' || p === 'manager' || p ==
 
 /** Набор и порядок вкладок для каждой роли. */
 export const TABS: Record<Persona, string[]> = {
-  anon: ['index', 'catalog', 'profile'],
+  anon: ['index', 'catalog', 'cart', 'profile'],
   buyer: ['index', 'catalog', 'cart', 'orders', 'profile'],
   courier: ['deliveries', 'profile'],
   workshop: ['workshop', 'orders', 'profile'],
-  cashier: ['catalog', 'profile'],
+  cashier: ['orders', 'catalog', 'profile'],
   admin: ['dashboard', 'orders', 'people', 'catalog', 'profile'],
   manager: ['dashboard', 'orders', 'people', 'catalog', 'profile'],
   accountant: ['dashboard', 'payments', 'reports', 'profile'],
@@ -103,7 +103,7 @@ export const HOME_HREF = {
   buyer: '/',
   courier: '/deliveries',
   workshop: '/workshop',
-  cashier: '/catalog',
+  cashier: '/orders',
   admin: '/dashboard',
   manager: '/dashboard',
   accountant: '/dashboard',

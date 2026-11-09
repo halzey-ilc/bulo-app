@@ -41,7 +41,8 @@ async function main() {
 
   // Розничный тип цен не трогаем: эти цены ведёт кассир
   const priceTypes = await prisma.priceType.findMany();
-  const partnerTypes = priceTypes.filter((t) => t.oneCId !== 'demo-retail' && norm(t.name) !== 'розничная');
+  // розничные типы (в том числе цены филиалов кофейни) — не трогаем
+  const partnerTypes = priceTypes.filter((t) => !t.isRetail && t.oneCId !== 'demo-retail' && norm(t.name) !== 'розничная');
   if (!partnerTypes.length) throw new Error('Нет типов цен для партнёров. Сначала запустите prisma db seed');
 
   // Категории — по названию
@@ -56,8 +57,8 @@ async function main() {
     categoryIds.set(c.name, cat.id);
   }
 
-  // Товары — по названию, демо-товары не переиспользуем
-  const existing = await prisma.product.findMany();
+  // Товары — по названию, демо-товары и меню кофейни (категории с разделом «Бар»/«Кухня») не переиспользуем
+  const existing = await prisma.product.findMany({ where: { category: { section: null } } });
   const touched = new Set<string>();
   const sortInCategory = new Map<string, number>();
   let created = 0;
@@ -103,18 +104,22 @@ async function main() {
     }
   }
 
-  // Всё, чего нет в файле, кроме товаров из 1С, — скрыть
+  // Всё, чего нет в файле, кроме товаров из 1С и меню кофейни, — скрыть
   const hidden = await prisma.product.updateMany({
     where: {
       id: { notIn: [...touched] },
       OR: [{ oneCId: null }, { oneCId: { startsWith: 'demo-' } }],
+      category: { section: null },
     },
     data: { visible: false },
   });
   const keepCategories = [...categoryIds.values()];
   const withVisible = await prisma.product.findMany({ where: { visible: true }, select: { categoryId: true } });
   const busy = new Set([...keepCategories, ...withVisible.map((x) => x.categoryId)]);
-  const hiddenCats = await prisma.category.updateMany({ where: { id: { notIn: [...busy] } }, data: { visible: false } });
+  const hiddenCats = await prisma.category.updateMany({
+    where: { id: { notIn: [...busy] }, section: null },
+    data: { visible: false },
+  });
 
   console.log(
     `Каталог загружен: создано ${created}, обновлено ${updated}, скрыто старых товаров ${hidden.count}, ` +

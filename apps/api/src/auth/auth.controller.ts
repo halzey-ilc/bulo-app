@@ -7,6 +7,7 @@ import { AuthService } from './auth.service';
 import {
   AddressDto,
   ChangePasswordDto,
+  OtpLoginDto,
   PasswordLoginDto,
   PushTokenDto,
   RegisterPartnerDto,
@@ -30,8 +31,8 @@ export class AuthController {
 
   @Public()
   @Post('login/otp')
-  loginOtp(@Body() dto: VerifyOtpDto) {
-    return this.auth.loginWithOtp(dto.phone, dto.code);
+  loginOtp(@Body() dto: OtpLoginDto) {
+    return this.auth.loginWithOtp(dto.phone, dto.code, dto.name);
   }
 
   @Public()
@@ -49,6 +50,12 @@ export class AuthController {
   @Get('me')
   me(@CurrentUser() user: AuthUser) {
     return publicUser(user);
+  }
+
+  /** Удалить свой аккаунт. */
+  @Delete('me')
+  deleteMe(@CurrentUser() user: AuthUser) {
+    return this.auth.deleteAccount(user);
   }
 
   @Patch('me')

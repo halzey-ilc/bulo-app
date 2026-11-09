@@ -51,9 +51,16 @@ enum OtpPurpose {
 }
 
 enum OneCDocType {
-  CUSTOMER_ORDER // «Заказ клиента» — при одобрении
+  CUSTOMER_ORDER // «Заказ клиента» — при подтверждении оплаты: товар списывается/резервируется в 1С
   PRODUCTION // «Заказ на производство» — по сводной накладной
-  SALE // «Реализация товаров и услуг» — при отгрузке
+  SALE // «Реализация товаров и услуг» — при отгрузке или выдаче гостю
+  CANCEL // Отмена подтверждённого заказа — 1С возвращает товар
+}
+
+/// Откуда заказ: партнёр (опт, доставка) или гость кофейни (самовывоз из филиала)
+enum OrderChannel {
+  PARTNER
+  CAFE
 }
 
 enum OneCDocStatus {
@@ -93,6 +100,58 @@ model User {
   positions     CourierPosition[]
   /// Курьер «на линии» — передаёт геопозицию
   onShiftSince  DateTime?
+  /// Любимый филиал гостя кофейни
+  branchId      String?
+  /// Пользователь удалил аккаунт: данные обезличены, вход закрыт
+  deletedAt     DateTime?
+}
+
+/// Филиал кофейни. Своё меню и цены — через собственный тип цен.
+model Branch {
+  id          String    @id @default(cuid())
+  name        String
+  address     String?
+  lat         Float?
+  lng         Float?
+  phone       String?
+  /// Часы работы "08:00" — "22:00": по ним строятся слоты брони
+  opensAt     String    @default("08:00")
+  closesAt    String    @default("22:00")
+  priceTypeId String    @unique
+  priceType   PriceType @relation(fields: [priceTypeId], references: [id])
+  /// Код склада филиала в 1С — откуда списывается товар
+  oneCWarehouseId String? @unique
+  active      Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  orders      Order[]
+}
+
+/// Остатки из 1С по складам. Свободный остаток = qty минус подтверждённые заказы, которые 1С ещё не приняла.
+model Stock {
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouseId String
+  qty         Decimal  @db.Decimal(12, 3)
+  updatedAt   DateTime @updatedAt
+
+  @@id([productId, warehouseId])
+}
+
+/// Истории на главной (как в Instagram). Ведут админ и менеджер.
+model Story {
+  id        String    @id @default(cuid())
+  title     String
+  caption   String?
+  imageUrl  String
+  /// Кнопка «Заказать» ведёт на товар
+  productId String?
+  /// ALL | CAFE | PARTNER — кому показывать
+  audience  String    @default("ALL")
+  active    Boolean   @default(true)
+  sortOrder Int       @default(0)
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
 }
 
 /// Лавка-партнёр (контрагент). Создаётся заявкой из приложения, одобряется админом.
@@ -144,6 +203,10 @@ model Category {
   visible      Boolean   @default(true)
   imageUrl     String?
   oneCId       String?   @unique
+  /// Раздел меню кофейни: «Бар», «Кухня»
+  section      String?
+  /// Напитки из этой категории участвуют в акции «7-й кофе бесплатно»
+  promoCoffee  Boolean   @default(false)
   products     Product[]
 }
 
@@ -169,6 +232,7 @@ model Product {
 
   prices     Price[]
   orderItems OrderItem[]
+  stocks     Stock[]
 }
 
 model PriceType {
@@ -180,6 +244,7 @@ model PriceType {
   oneCId    String?   @unique
   prices    Price[]
   partners  Partner[]
+  branch    Branch?
 }
 
 model Price {
@@ -195,8 +260,24 @@ model Price {
 model Order {
   id              String      @id @default(cuid())
   number          Int         @unique @default(autoincrement())
-  partnerId       String
-  partner         Partner     @relation(fields: [partnerId], references: [id])
+  channel         OrderChannel @default(PARTNER)
+  /// Партнёр — только у оптовых заказов. У брони гостя партнёра нет, покупатель — createdBy.
+  partnerId       String?
+  partner         Partner?    @relation(fields: [partnerId], references: [id])
+  /// Филиал самовывоза (бронь гостя кофейни)
+  branchId        String?
+  branch          Branch?     @relation(fields: [branchId], references: [id])
+  /// Когда гость заберёт бронь
+  pickupAt        DateTime?
+  /// Скидка по акции и сколько напитков в подарок
+  discount        Decimal     @default(0) @db.Decimal(12, 2)
+  freeCoffees     Int         @default(0)
+  /// Подтверждение админом/менеджером: после него заказ идёт в цех и в 1С
+  confirmedAt     DateTime?
+  confirmedById   String?
+  /// Покупатель сообщил, что оплатил (QR или перевод), и, может быть, приложил чек
+  paymentClaimedAt DateTime?
+  receiptUrl      String?
   createdById     String
   createdBy       User        @relation("OrderCreatedBy", fields: [createdById], references: [id])
   status          OrderStatus @default(NEW)
@@ -206,7 +287,7 @@ model Order {
   total           Decimal     @db.Decimal(12, 2)
   rejectReason    String?
 
-  /// Оплата. Способ оплаты пока не выбран — сейчас бухгалтер отмечает оплату вручную.
+  /// Способ оплаты: QR | BANK (расчётный счёт) | CASH (наличные). paidAt — когда деньги получены.
   paymentMethod   String?
   paidAt          DateTime?
   paidById        String?
@@ -239,6 +320,8 @@ model Order {
 
   @@index([deliveryDate, status])
   @@index([partnerId])
+  @@index([channel, status])
+  @@index([createdById])
 }
 
 model OrderItem {
@@ -252,6 +335,10 @@ model OrderItem {
   qty       Decimal @db.Decimal(12, 3)
   price     Decimal @db.Decimal(12, 2)
   sum       Decimal @db.Decimal(12, 2)
+  /// Кофе по акции: считается в карту «7-й бесплатно»
+  promo     Boolean @default(false)
+  /// Сколько штук в подарок
+  freeQty   Int     @default(0)
 }
 
 model OrderStatusHistory {
@@ -298,6 +385,21 @@ model Settings {
   /// Точка выдачи (пекарня) — откуда выезжает курьер
   bakeryLat     Float    @default(42.8746)
   bakeryLng     Float    @default(74.5698)
+  /// Оплата по QR: строка QR из банка (стандарт ELQR). Сумму и номер заказа подставляем сами.
+  qrPayload     String?
+  /// Подставлять сумму в QR (включить после проверки в банковском приложении)
+  qrWithAmount  Boolean  @default(false)
+  /// Реквизиты для оплаты на расчётный счёт
+  bankName      String?
+  bankRecipient String?
+  bankAccount   String?
+  bankBik       String?
+  bankInn       String?
+  /// Акция «N-й кофе бесплатно»
+  promoEnabled  Boolean  @default(true)
+  promoEvery    Int      @default(7)
+  /// Склад цеха в 1С — откуда списываются партнёрские заказы
+  workshopWarehouseId String?
   updatedAt     DateTime @updatedAt
 }
 

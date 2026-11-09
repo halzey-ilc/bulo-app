@@ -21,8 +21,8 @@ export const ROLE_LABELS: Record<Role, string> = {
   COURIER: 'Курьер',
   CASHIER: 'Кассир',
   PARTNER: 'Партнёр',
-  GUEST: 'Гость',
-  CLIENT: 'Клиент',
+  GUEST: 'Просмотр',
+  CLIENT: 'Гость',
 };
 
 /** Роли сотрудников, которых админ создаёт приглашением. */
@@ -42,9 +42,9 @@ export const ORDER_STATUSES = [
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  NEW: 'Принят',
+  NEW: 'Ждёт оплаты',
   APPROVED: 'Одобрен',
-  PAID: 'Оплачен',
+  PAID: 'Подтверждён',
   IN_PRODUCTION: 'В производстве',
   READY: 'Готов к отгрузке',
   SHIPPED: 'Передан курьеру',

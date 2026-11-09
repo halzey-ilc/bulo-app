@@ -17,7 +17,8 @@ import { OneCDocStatus, OneCDocType } from '@prisma/client';
 import type { Response } from 'express';
 import { Public, Roles } from '../common/decorators';
 import { sendFile } from '../common/send-file';
-import { AckDto, CounterpartiesDto, NomenclatureDto, PricesImportDto, PriceTypesDto } from './onec.dto';
+import { AckDto, CounterpartiesDto, NomenclatureDto, PricesImportDto, PriceTypesDto, StockImportDto } from './onec.dto';
+import { OneCPushService } from './onec-push.service';
 import { OneCService } from './onec.service';
 
 /** 1С авторизуется ключом в заголовке X-Api-Key. */
@@ -65,6 +66,12 @@ export class OneCController {
     return this.onec.importCounterparties(dto);
   }
 
+  /** Остатки по складам — 1С присылает после каждого изменения или по расписанию. */
+  @Post('import/stock')
+  stock(@Body() dto: StockImportDto) {
+    return this.onec.importStock(dto);
+  }
+
   @Get('outbox')
   outbox(@Query('limit') limit?: string) {
     return this.onec.outbox(limit ? Number(limit) : undefined);
@@ -80,11 +87,20 @@ export class OneCController {
 @Controller('admin/onec')
 @Roles('ADMIN', 'ACCOUNTANT')
 export class OneCAdminController {
-  constructor(private readonly onec: OneCService) {}
+  constructor(
+    private readonly onec: OneCService,
+    private readonly push: OneCPushService,
+  ) {}
 
   @Get('status')
   status() {
     return this.onec.status();
+  }
+
+  /** Отправить очередь в 1С и забрать остатки прямо сейчас (если заданы адрес и логин 1С). */
+  @Post('sync')
+  sync() {
+    return this.push.syncNow();
   }
 
   @Get('documents')

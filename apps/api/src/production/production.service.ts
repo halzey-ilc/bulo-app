@@ -38,7 +38,7 @@ function orderBrief(o: OrderWithLines) {
     id: o.id,
     number: o.number,
     status: o.status,
-    partner: o.partner.name,
+    partner: o.partner?.name ?? 'Гость',
     total: Number(o.total),
     deliveryAddress: o.deliveryAddress,
   };
@@ -63,7 +63,7 @@ export class ProductionService {
     const day = this.date(date);
     const [pending, sheets] = await Promise.all([
       this.prisma.order.findMany({
-        where: { deliveryDate: day, status: { in: AWAITING_PRODUCTION }, productionSheetId: null },
+        where: { channel: 'PARTNER', deliveryDate: day, status: { in: AWAITING_PRODUCTION }, productionSheetId: null },
         include: lineInclude,
         orderBy: { number: 'asc' },
       }),
@@ -75,10 +75,10 @@ export class ProductionService {
     ]);
     const [awaitingPayment, inWork] = await Promise.all([
       this.prisma.order.count({
-        where: { deliveryDate: day, paidAt: null, status: { notIn: ['REJECTED', 'CANCELLED'] } },
+        where: { channel: 'PARTNER', deliveryDate: day, status: 'NEW', confirmedAt: null },
       }),
       this.prisma.order.findMany({
-        where: { deliveryDate: day, status: { in: [...AWAITING_PRODUCTION, 'IN_PRODUCTION', 'READY'] } },
+        where: { channel: 'PARTNER', deliveryDate: day, status: { in: [...AWAITING_PRODUCTION, 'IN_PRODUCTION', 'READY'] } },
         include: lineInclude,
       }),
     ]);
@@ -99,7 +99,7 @@ export class ProductionService {
   async createSheet(user: AuthUser, date: string) {
     const day = this.date(date);
     const orders = await this.prisma.order.findMany({
-      where: { deliveryDate: day, status: { in: AWAITING_PRODUCTION }, productionSheetId: null },
+      where: { channel: 'PARTNER', deliveryDate: day, status: { in: AWAITING_PRODUCTION }, productionSheetId: null },
       include: lineInclude,
     });
     if (!orders.length) throw new BadRequestException('Нет новых заказов, которые ещё не переданы в цех');
@@ -176,7 +176,7 @@ export class ProductionService {
   async invoices(date: string) {
     const day = this.date(date);
     const orders = await this.prisma.order.findMany({
-      where: { deliveryDate: day, status: { in: SHIPPABLE } },
+      where: { channel: 'PARTNER', deliveryDate: day, status: { in: SHIPPABLE } },
       include: lineInclude,
     });
     return orders
@@ -187,11 +187,11 @@ export class ProductionService {
         status: o.status,
         date,
         partner: {
-          name: o.partner.name,
-          inn: o.partner.inn,
-          contactName: o.partner.contactName,
-          phone: o.partner.phone,
-          oneCId: o.partner.oneCId,
+          name: o.partner?.name ?? 'Гость',
+          inn: o.partner?.inn ?? null,
+          contactName: o.partner?.contactName ?? null,
+          phone: o.partner?.phone ?? null,
+          oneCId: o.partner?.oneCId ?? null,
         },
         deliveryAddress: o.deliveryAddress,
         comment: o.comment,

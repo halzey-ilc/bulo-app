@@ -55,7 +55,7 @@ export default function OrderPage() {
   const canEdit = order && ['NEW', 'APPROVED', 'PAID'].includes(order.status) && ['ADMIN', 'MANAGER'].includes(me.role);
   /** Оплата отмечается отдельно от статуса: цех готовит, не дожидаясь её */
   const canMarkPaid =
-    !!order && !order.paidAt && !['REJECTED', 'CANCELLED'].includes(order.status) && ['ADMIN', 'ACCOUNTANT'].includes(me.role);
+    !!order && !order.paidAt && !['REJECTED', 'CANCELLED'].includes(order.status) && ['ADMIN', 'MANAGER', 'ACCOUNTANT'].includes(me.role);
 
   const changeStatus = async (status: OrderStatus, extra: { comment?: string } = {}) => {
     setBusy(status);
@@ -124,7 +124,7 @@ export default function OrderPage() {
           ))}
           {canMarkPaid && (
             <Button variant="dark" onClick={() => setPayOpen(true)}>
-              <Wallet className="h-4 w-4" /> Отметить оплату
+              <Wallet className="h-4 w-4" /> {order.status === 'NEW' ? 'Оплата получена — подтвердить' : 'Отметить оплату'}
             </Button>
           )}
           {negative.map((a) => (
@@ -272,7 +272,7 @@ export default function OrderPage() {
           <Card>
             <SectionTitle>Партнёр</SectionTitle>
             <Link href={`/partners/${order.partnerId}`} className="text-lg font-bold hover:text-mango">
-              {order.partner?.name}
+              {order.partner?.name ?? order.buyer}
             </Link>
             <dl className="mt-3 space-y-2 text-sm">
               <Row label="ИНН">{order.partner?.inn ?? '—'}</Row>
@@ -391,7 +391,7 @@ function PayModal({
       }
     >
       <div className="mb-5 rounded-2xl bg-oat p-4 text-center">
-        <div className="text-sm text-muted">{order.partner?.name}</div>
+        <div className="text-sm text-muted">{order.partner?.name ?? order.buyer}</div>
         <div className="text-3xl font-bold">{fmtMoney(order.total)}</div>
       </div>
       <Note tone="yellow" icon={<Info className="h-4 w-4" />} className="mb-4">

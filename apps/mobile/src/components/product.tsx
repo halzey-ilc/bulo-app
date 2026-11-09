@@ -89,6 +89,7 @@ export function useAddToCart() {
         price: p.price,
         photoUrl: p.photoUrl,
         categoryName: p.category?.name,
+        promo: p.promo,
       },
       qty ?? normalizeQty(p.multiplicity || 1, p.multiplicity),
     );
@@ -154,6 +155,9 @@ export const ProductCard = memo(function ProductCard({
   const addToCart = useAddToCart();
   const inCart = useInCart(product.id);
   const step = product.multiplicity || 1;
+  const soldOut = product.stock === 0;
+  const few = product.stock != null && product.stock > 0 && product.stock <= 5;
+  const sub = [product.weight, product.multiplicity > 1 ? `по ${product.multiplicity} ${product.unit}` : null].filter(Boolean).join(' · ');
   return (
     <Touchable
       onPress={() => router.push(`/product/${product.id}`)}
@@ -170,15 +174,32 @@ export const ProductCard = memo(function ProductCard({
           rounded={radius.lg}
         />
         {product.isNew && <NewBadge style={{ position: 'absolute', top: 8, left: 8 }} />}
+        {product.promo && !product.isNew && (
+          <View style={[styles.stampBadge, { position: 'absolute', top: 8, left: 8 }]}>
+            <Icon name="coffee" size={12} color={colors.coffee} strokeWidth={2.2} />
+            <T v="caption" color={colors.coffee} style={{ fontFamily: fonts.extrabold }}>
+              +1 штамп
+            </T>
+          </View>
+        )}
+        {(soldOut || few) && (
+          <View style={[styles.stockBadge, soldOut && { backgroundColor: colors.cambodia }]}>
+            <T v="caption" color={colors.white} style={{ fontFamily: fonts.extrabold }}>
+              {soldOut ? 'Закончился' : `Осталось ${product.stock}`}
+            </T>
+          </View>
+        )}
         <FavoriteButton productId={product.id} style={{ position: 'absolute', top: 6, right: 6 }} />
       </View>
       <View style={{ paddingHorizontal: 4, paddingTop: 10, gap: 2, flex: 1 }}>
         <T v="bodyStrong" numberOfLines={2} style={{ fontSize: 14, lineHeight: 19, minHeight: 38 }}>
           {product.name}
         </T>
-        <T v="small" color={colors.textSoft} numberOfLines={1}>
-          {[product.weight, `по ${product.multiplicity} ${product.unit}`].filter(Boolean).join(' · ')}
-        </T>
+        {!!sub && (
+          <T v="small" color={colors.textSoft} numberOfLines={1}>
+            {sub}
+          </T>
+        )}
       </View>
       <View style={styles.cardFoot}>
         {product.price != null ? (
@@ -195,7 +216,7 @@ export const ProductCard = memo(function ProductCard({
             </T>
           </View>
         )}
-        {product.price != null && canOrder && (
+        {product.price != null && canOrder && !soldOut && (
           inCart > 0 ? (
             <View style={styles.miniStepper}>
               <Touchable
@@ -341,6 +362,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  stampBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: colors.softYellow, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999 },
+  stockBadge: { position: "absolute", bottom: 8, left: 8, backgroundColor: colors.mango, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
   lockPrice: {
     flexDirection: 'row',
     alignItems: 'center',

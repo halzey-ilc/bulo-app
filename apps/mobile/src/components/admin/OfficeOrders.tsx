@@ -6,29 +6,37 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { errorMessage, Orders } from '../../api';
 import { Admin, OfficeOrder } from '../../api/admin';
 import { addDaysIso, dateChip, dayLabel, money, plural, todayIso } from '../../lib/format';
+import { runConfirm, runMarkPaid } from '../../lib/orderActions';
 import { useLoad } from '../../lib/useLoad';
 import { useAuth } from '../../store/auth';
 import { toast } from '../../store/ui';
-import { ACTION_LABELS, allowedTransitions, canMarkPaid, ORDER_STATUS_LABELS, OrderStatus, Role } from '../../shared';
+import { actionLabel, allowedTransitions, canConfirm, canMarkPaid, OrderStatus, Role, statusLabel } from '../../shared';
 import { colors, fonts, radius, shadows, space } from '../../theme';
+import { paymentTitle } from '../cafe';
 import { callPhone } from '../contacts';
 import { Header, TAB_BAR_SPACE } from '../layout';
-import { StatusChip } from '../order';
+import { orderTitle, orderWhen, StatusChip } from '../order';
 import { ProductImage } from '../product';
-import { Button, Chip, EmptyState, ErrorState, hapticSuccess, T, Touchable } from '../ui';
+import { Button, Chip, EmptyState, ErrorState, T, Touchable } from '../ui';
 import { AIcon } from './icons';
 import { ActionItem, ago, ListSkeleton, SearchBar, Segmented, Sheet, TabHeader } from './kit';
-import { ORDER_REJECT_PRESETS, PayMethodSheet, ReasonSheet } from './Sheets';
+import { ORDER_REJECT_PRESETS, ReasonSheet } from './Sheets';
 
-type FKey = 'new' | 'approved' | 'work' | 'ready' | 'all';
-const OPEN: OrderStatus[] = ['NEW', 'APPROVED', 'PAID', 'IN_PRODUCTION', 'READY', 'SHIPPED', 'DELIVERED'];
-const FILTERS: { key: FKey; label: string; statuses?: OrderStatus[]; paid?: boolean }[] = [
-  { key: 'new', label: 'Новые', statuses: ['NEW', 'APPROVED', 'PAID'] },
-  { key: 'approved', label: 'Не оплачены', statuses: OPEN, paid: false },
-  { key: 'work', label: 'В работе', statuses: ['IN_PRODUCTION'] },
-  { key: 'ready', label: 'Готовы', statuses: ['READY', 'SHIPPED'] },
+/** Действие в строке: смена статуса, подтверждение оплаты или «деньги получены». */
+type Act = OrderStatus | 'CONFIRM' | 'MONEY';
+
+type FKey = 'confirm' | 'cafe' | 'work' | 'ready' | 'debt' | 'all';
+const OPEN: OrderStatus[] = ['APPROVED', 'PAID', 'IN_PRODUCTION', 'READY', 'SHIPPED', 'DELIVERED'];
+const FILTERS: { key: FKey; label: string; statuses?: OrderStatus[]; paid?: boolean; awaiting?: boolean; channel?: 'CAFE' | 'PARTNER' }[] = [
+  { key: 'confirm', label: 'Подтвердить', awaiting: true },
+  { key: 'cafe', label: 'Брони', channel: 'CAFE', statuses: ['PAID', 'READY'] },
+  { key: 'work', label: 'В цеху', channel: 'PARTNER', statuses: ['APPROVED', 'PAID', 'IN_PRODUCTION'] },
+  { key: 'ready', label: 'Готовы', channel: 'PARTNER', statuses: ['READY', 'SHIPPED'] },
+  { key: 'debt', label: 'Не оплачены', statuses: OPEN, paid: false },
   { key: 'all', label: 'Все' },
 ];
+
+type CKey = 'any' | 'CAFE' | 'PARTNER';
 
 type DKey = 'any' | 'yesterday' | 'today' | 'tomorrow' | 'after';
 const DATES: { key: DKey; label: string; shift?: number }[] = [
@@ -40,16 +48,19 @@ const DATES: { key: DKey; label: string; shift?: number }[] = [
 ];
 
 /**
- * Заказы глазами офиса: быстрый разбор новых, одобрение в одно касание,
- * отклонение с причиной, меню действий по долгому нажатию.
+ * Заказы глазами офиса: сначала — что подтвердить (оплата пришла / принять за наличные),
+ * потом брони кофейни, цех, готовые. Отклонение с причиной, меню по долгому нажатию.
  */
 export function OfficeOrders({ stack }: { stack?: boolean }) {
   const insets = useSafeAreaInsets();
   const role = useAuth((s) => s.user?.role) as Role;
+  const cashier = role === 'CASHIER';
   const params = useLocalSearchParams<{ f?: string; d?: string }>();
-  const [fkey, setFkey] = useState<FKey>((params.f as FKey) || (role === 'ACCOUNTANT' ? 'approved' : 'new'));
+  const [fkey, setFkey] = useState<FKey>((params.f as FKey) || 'confirm');
+  const [ckey, setCkey] = useState<CKey>('any');
   const [dkey, setDkey] = useState<DKey>((params.d as DKey) || 'any');
   const [query, setQuery] = useState('');
+  const filters = cashier ? FILTERS.filter((f) => f.key !== 'work' && f.key !== 'ready') : FILTERS;
 
   // Переход с пульта с новым фильтром
   useEffect(() => {
@@ -62,16 +73,25 @@ export function OfficeOrders({ stack }: { stack?: boolean }) {
   const filter = FILTERS.find((f) => f.key === fkey)!;
   const date = DATES.find((d) => d.key === dkey)!;
   const day = date.shift != null ? addDaysIso(todayIso(), date.shift) : undefined;
+  const channel = filter.channel ?? (ckey === 'any' ? undefined : ckey);
 
   const list = useLoad(
-    () => Admin.orders({ status: filter.statuses, paid: filter.paid, dateFrom: day, dateTo: day, search: query || undefined }),
-    [fkey, day, query],
+    () =>
+      Admin.orders({
+        status: filter.statuses,
+        paid: filter.paid,
+        awaiting: filter.awaiting,
+        channel,
+        dateFrom: day,
+        dateTo: day,
+        search: query || undefined,
+      }),
+    [fkey, channel, day, query],
   );
-  const dash = useLoad(() => Admin.dashboard(), []);
+  const dash = useLoad(() => (cashier ? Promise.resolve(null) : Admin.dashboard()), [cashier]);
 
   const [menu, setMenu] = useState<OfficeOrder | null>(null);
   const [rejecting, setRejecting] = useState<{ o: OfficeOrder; cancel: boolean } | null>(null);
-  const [paying, setPaying] = useState<OfficeOrder | null>(null);
 
   const sections = useMemo(() => {
     const map = new Map<string, OfficeOrder[]>();
@@ -83,6 +103,9 @@ export function OfficeOrders({ stack }: { stack?: boolean }) {
     return [...map].map(([d, data]) => ({ key: d, title: d, total: data.reduce((a, o) => a + o.total, 0), data }));
   }, [list.data]);
 
+  const replace = (o: OfficeOrder) =>
+    list.setData((cur) => (cur ?? []).flatMap((x) => (x.id !== o.id ? [x] : fkey === 'confirm' && o.status !== 'NEW' ? [] : [o])));
+
   /** Смена статуса с мгновенным откликом и откатом при ошибке. */
   const change = useCallback(
     async (o: OfficeOrder, status: OrderStatus, extra: { comment?: string } = {}) => {
@@ -92,7 +115,7 @@ export function OfficeOrders({ stack }: { stack?: boolean }) {
       Haptics.notificationAsync(status === 'REJECTED' || status === 'CANCELLED' ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Success).catch(() => {});
       try {
         await Orders.setStatus(o.id, status, extra);
-        toast.success(`№${o.number}: ${ORDER_STATUS_LABELS[status].toLowerCase()}`);
+        toast.success(`№${o.number}: ${statusLabel(status, o.channel).toLowerCase()}`);
         dash.reload();
       } catch (e) {
         list.setData(prev);
@@ -105,23 +128,53 @@ export function OfficeOrders({ stack }: { stack?: boolean }) {
   );
 
   const onAction = useCallback(
-    (o: OfficeOrder, a: OrderStatus) => {
+    (o: OfficeOrder, a: Act) => {
+      const done = (u: OfficeOrder) => {
+        replace(u);
+        dash.reload();
+      };
+      if (a === 'CONFIRM') return runConfirm(o, (u) => done(u as OfficeOrder));
+      if (a === 'MONEY') return runMarkPaid(o, (u) => done(u as OfficeOrder));
       if (a === 'REJECTED' || a === 'CANCELLED') return setRejecting({ o, cancel: a === 'CANCELLED' });
-      if (a === 'PAID') return setPaying(o); // оплата — отдельная отметка, не статус
       change(o, a).catch(() => {});
     },
-    [change],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [change, fkey],
   );
 
   const d = dash.data;
-  const counts: Partial<Record<FKey, number>> = d ? { new: d.newOrders, approved: d.awaitingPayment.count, work: d.inProduction, ready: d.ready } : {};
+  const counts: Partial<Record<FKey, number>> = d ? { confirm: d.newOrders, cafe: d.cafeActive, work: d.inProduction, ready: d.ready, debt: d.awaitingPayment.count } : {};
   const cancelMode = !!rejecting?.cancel;
 
   const header = (
     <View style={{ gap: space.md, paddingBottom: space.sm }}>
-      {!stack && <TabHeader title="Заказы" subtitle={d ? `${d.newOrders} ${plural(d.newOrders, 'новый', 'новых', 'новых')} · ${d.awaitingPayment.count} ждут оплаты` : 'Разбор и статусы'} />}
-      <Segmented scroll items={FILTERS.map((f) => ({ key: f.key, label: f.label, count: counts[f.key] }))} value={fkey} onChange={setFkey} />
-      <SearchBar placeholder="Партнёр или номер заказа" onDebounced={setQuery} />
+      {!stack && (
+        <TabHeader
+          title={cashier ? 'Брони' : 'Заказы'}
+          subtitle={
+            d
+              ? `${d.newOrders} ${plural(d.newOrders, 'ждёт', 'ждут', 'ждут')} подтверждения${d.claimed ? ` · ${d.claimed} уже оплатили` : ''}`
+              : cashier
+                ? 'Брони гостей кофейни'
+                : 'Подтверждение и статусы'
+          }
+        />
+      )}
+      <Segmented scroll items={filters.map((f) => ({ key: f.key, label: f.label, count: counts[f.key] }))} value={fkey} onChange={setFkey} />
+      {!cashier && !filter.channel && (
+        <View style={{ flexDirection: 'row', gap: space.sm }}>
+          {(
+            [
+              ['any', 'Все'],
+              ['CAFE', 'Кофейня'],
+              ['PARTNER', 'Партнёры'],
+            ] as [CKey, string][]
+          ).map(([k, label]) => (
+            <Chip key={k} label={label} icon={k === 'CAFE' ? 'coffee' : k === 'PARTNER' ? 'shop' : undefined} active={ckey === k} onPress={() => setCkey(k)} />
+          ))}
+        </View>
+      )}
+      <SearchBar placeholder={cashier ? 'Имя, телефон или номер брони' : 'Партнёр, гость или номер заказа'} onDebounced={setQuery} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -space.lg }} contentContainerStyle={{ paddingHorizontal: space.lg, gap: space.sm }}>
         {DATES.map((x) => (
           <Chip key={x.key} label={x.label} icon={x.key === 'any' ? 'calendar' : undefined} active={x.key === dkey} onPress={() => setDkey(x.key)} />
@@ -168,8 +221,14 @@ export function OfficeOrders({ stack }: { stack?: boolean }) {
             <EmptyState
               icon={query ? 'search' : 'check'}
               tint={query ? colors.softYellow : colors.greenSoft}
-              title={query ? 'Ничего не нашли' : fkey === 'new' ? 'Новых заказов нет' : 'Здесь пусто'}
-              text={query ? `По запросу «${query}» заказов нет.` : fkey === 'new' ? 'Как только партнёр оформит заказ, он появится здесь.' : 'Попробуйте другой фильтр или дату.'}
+              title={query ? 'Ничего не нашли' : fkey === 'confirm' ? 'Всё подтверждено' : 'Здесь пусто'}
+              text={
+                query
+                  ? `По запросу «${query}» заказов нет.`
+                  : fkey === 'confirm'
+                    ? 'Новые заказы и брони появятся здесь — подтвердите их, когда придёт оплата.'
+                    : 'Попробуйте другой фильтр или дату.'
+              }
               action={dkey !== 'any' ? 'Все даты' : undefined}
               onAction={() => setDkey('any')}
             />
@@ -190,34 +249,13 @@ export function OfficeOrders({ stack }: { stack?: boolean }) {
         visible={!!rejecting}
         onClose={() => setRejecting(null)}
         title={cancelMode ? `Отменить №${rejecting?.o.number}?` : `Отклонить №${rejecting?.o.number}?`}
-        message="Партнёр увидит причину в приложении"
+        message="Покупатель увидит причину в приложении"
         presets={ORDER_REJECT_PRESETS}
         confirmText={cancelMode ? 'Отменить заказ' : 'Отклонить заказ'}
         onSubmit={async (reason) => {
           const { o } = rejecting!;
           setRejecting(null);
           await change(o, cancelMode ? 'CANCELLED' : 'REJECTED', { comment: reason }).catch(() => {});
-        }}
-      />
-      <PayMethodSheet
-        visible={!!paying}
-        onClose={() => setPaying(null)}
-        title={`Оплата №${paying?.number ?? ''}`}
-        total={paying?.total}
-        onPick={async (m) => {
-          const o = paying!;
-          setPaying(null);
-          try {
-            await Orders.markPaid(o.id, { paymentMethod: m });
-            hapticSuccess();
-            toast.success(`№${o.number}: оплата отмечена`);
-            list.setData((cur) =>
-              (cur ?? []).flatMap((x) => (x.id !== o.id ? [x] : filter.paid === false ? [] : [{ ...x, paidAt: new Date().toISOString() }])),
-            );
-            dash.reload();
-          } catch (e) {
-            toast.error(errorMessage(e));
-          }
         }}
       />
     </View>
@@ -251,6 +289,16 @@ function DayHeader({ date, count, total }: { date: string; count: number; total:
   );
 }
 
+function rowActions(order: OfficeOrder, role: Role): Act[] {
+  if (canConfirm(order, role)) return ['CONFIRM', ...(allowedTransitions(order.status, role, order.channel).includes('REJECTED') ? (['REJECTED'] as Act[]) : [])];
+  const moves = allowedTransitions(order.status, role, order.channel).filter((a) => a !== 'CANCELLED' && a !== 'REJECTED');
+  const money = canMarkPaid(order, role) && !(order.channel === 'CAFE' && moves.includes('DELIVERED'));
+  return [...moves.slice(0, money ? 1 : 2), ...(money ? (['MONEY'] as Act[]) : [])];
+}
+
+const actTitle = (a: Act, o: OfficeOrder) =>
+  a === 'CONFIRM' ? (o.paymentMethod === 'CASH' ? 'Принять' : 'Оплата пришла') : a === 'MONEY' ? 'Деньги получены' : actionLabel(a, o.channel);
+
 const OrderRow = memo(function OrderRow({
   order,
   role,
@@ -259,12 +307,12 @@ const OrderRow = memo(function OrderRow({
 }: {
   order: OfficeOrder;
   role: Role;
-  onAction: (o: OfficeOrder, a: OrderStatus) => void;
+  onAction: (o: OfficeOrder, a: Act) => void;
   onMenu: (o: OfficeOrder) => void;
 }) {
-  const pay = canMarkPaid(order, role);
-  const actions = [...(role ? allowedTransitions(order.status, role).filter((a) => a !== 'CANCELLED') : []).slice(0, pay ? 1 : 2), ...(pay ? (['PAID'] as OrderStatus[]) : [])];
+  const actions = rowActions(order, role);
   const fresh = order.status === 'NEW';
+  const cafe = order.channel === 'CAFE';
   const count = order.items.length;
   return (
     <Touchable
@@ -275,12 +323,15 @@ const OrderRow = memo(function OrderRow({
       }}
       delayLongPress={350}
       scaleTo={0.985}
-      style={[st.row, fresh && st.rowFresh]}
+      style={[st.row, fresh && st.rowFresh, fresh && !!order.paymentClaimedAt && st.rowClaimed]}
     >
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.md }}>
         <View style={{ flex: 1, gap: 2 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-            <T v="h3">№{order.number}</T>
+            <View style={[st.channel, { backgroundColor: cafe ? colors.coffeeSoft : colors.softYellow }]}>
+              <AIcon name={cafe ? 'coffee' : 'shop'} size={12} color={cafe ? colors.coffee : '#8A5A00'} strokeWidth={2.2} />
+            </View>
+            <T v="h3">{orderTitle(order)}</T>
             {fresh && (
               <T v="caption" color={colors.mango} style={{ fontFamily: fonts.bold }}>
                 {ago(order.createdAt)}
@@ -288,16 +339,14 @@ const OrderRow = memo(function OrderRow({
             )}
           </View>
           <T v="bodyStrong" numberOfLines={1}>
-            {order.partner?.name}
+            {order.buyer}
           </T>
-          {!!order.deliveryAddress && (
-            <T v="small" color={colors.textMuted} numberOfLines={1}>
-              {order.deliveryAddress}
-            </T>
-          )}
+          <T v="small" color={colors.textMuted} numberOfLines={1}>
+            {cafe ? `Заберёт ${orderWhen(order)}` : order.deliveryAddress}
+          </T>
         </View>
         <View style={{ alignItems: 'flex-end', gap: 6 }}>
-          <StatusChip status={order.status} small />
+          <StatusChip status={order.status} small channel={order.channel} />
           <T v="h3">{money(order.total)}</T>
         </View>
       </View>
@@ -308,8 +357,10 @@ const OrderRow = memo(function OrderRow({
           ))}
         </View>
         <T v="small" color={colors.textSoft} style={{ flex: 1 }} numberOfLines={1}>
-          {count} {plural(count, 'позиция', 'позиции', 'позиций')}
-          {order.comment ? ' · есть комментарий' : ''}
+          {paymentTitle(order.paymentMethod)}
+          {order.paidAt ? ' · оплачено' : order.paymentClaimedAt ? ' · оплатил, проверьте' : ''}
+          {order.freeCoffees ? ` · 🎁 ${order.freeCoffees}` : ''}
+          {!order.paidAt && !order.paymentClaimedAt ? ` · ${count} ${plural(count, 'позиция', 'позиции', 'позиций')}` : ''}
         </T>
         <Touchable haptic onPress={() => onMenu(order)} hitSlop={10} accessibilityLabel="Действия" style={st.more}>
           <AIcon name="dots" size={20} color={colors.textMuted} strokeWidth={2.4} />
@@ -321,10 +372,10 @@ const OrderRow = memo(function OrderRow({
             <Button
               key={a}
               small
-              title={a === 'PAID' ? 'Оплата получена' : ACTION_LABELS[a] ?? a}
-              icon={a === 'APPROVED' ? 'check' : a === 'REJECTED' ? 'close' : undefined}
-              kind={a === 'REJECTED' ? 'ghost' : a === 'APPROVED' || a === 'PAID' ? 'primary' : 'dark'}
-              style={{ flex: 1 }}
+              title={actTitle(a, order)}
+              icon={a === 'CONFIRM' ? 'check' : a === 'REJECTED' ? 'close' : undefined}
+              kind={a === 'REJECTED' ? 'ghost' : a === 'CONFIRM' || a === 'MONEY' || a === 'READY' || a === 'DELIVERED' ? 'primary' : 'dark'}
+              style={{ flex: a === 'REJECTED' ? 0.7 : 1 }}
               onPress={() => onAction(order, a)}
             />
           ))}
@@ -335,25 +386,47 @@ const OrderRow = memo(function OrderRow({
 });
 
 /** Меню действий по долгому нажатию. */
-function OrderMenu({ order, role, onClose, onAction }: { order: OfficeOrder | null; role: Role; onClose: () => void; onAction: (o: OfficeOrder, a: OrderStatus) => void }) {
+function OrderMenu({ order, role, onClose, onAction }: { order: OfficeOrder | null; role: Role; onClose: () => void; onAction: (o: OfficeOrder, a: Act) => void }) {
   const o = order;
-  const actions = o && role ? [...allowedTransitions(o.status, role), ...(canMarkPaid(o, role) ? (['PAID'] as OrderStatus[]) : [])] : [];
-  const canEdit = !!o && (role === 'ADMIN' || role === 'MANAGER') && ['NEW', 'APPROVED', 'PAID'].includes(o.status);
+  const moves = o && role ? allowedTransitions(o.status, role, o.channel) : [];
+  const confirm = !!o && canConfirm(o, role);
+  const money_ = !!o && canMarkPaid(o, role);
+  const canEdit = !!o && (role === 'ADMIN' || role === 'MANAGER') && o.status === 'NEW' && !o.confirmedAt;
+  const phone = o?.partner?.phone ?? o?.createdBy?.phone ?? null;
   return (
-    <Sheet visible={!!o} onClose={onClose} title={o ? `Заказ №${o.number}` : ''} subtitle={o ? `${o.partner?.name} · ${money(o.total)}` : ''}>
+    <Sheet visible={!!o} onClose={onClose} title={o ? orderTitle(o) : ''} subtitle={o ? `${o.buyer} · ${money(o.total)}` : ''}>
       {o && (
         <View style={{ gap: space.sm }}>
-          {actions
+          {confirm && (
+            <ActionItem
+              icon="check"
+              tone="green"
+              title={o.paymentMethod === 'CASH' ? 'Принять заказ' : 'Оплата пришла — подтвердить'}
+              subtitle={o.channel === 'CAFE' ? 'Бронь подтвердится, товар спишется в 1С' : 'Заказ уйдёт в цех, товар спишется в 1С'}
+              onPress={() => onAction(o, 'CONFIRM')}
+            />
+          )}
+          {moves
             .filter((a) => a !== 'CANCELLED' && a !== 'REJECTED')
             .map((a) => (
-              <ActionItem key={a} icon={a === 'APPROVED' ? 'check' : a === 'PAID' ? 'cash' : a === 'IN_PRODUCTION' ? 'chef' : a === 'READY' ? 'box' : 'truck'} tone="green" title={a === 'PAID' ? 'Оплата получена' : ACTION_LABELS[a] ?? a} subtitle={a === 'PAID' ? 'Статус заказа не изменится' : `→ ${ORDER_STATUS_LABELS[a]}`} onPress={() => onAction(o, a)} />
+              <ActionItem
+                key={a}
+                icon={a === 'IN_PRODUCTION' ? 'chef' : a === 'READY' ? 'box' : a === 'DELIVERED' ? 'check' : 'truck'}
+                tone="green"
+                title={actionLabel(a, o.channel)}
+                subtitle={`→ ${statusLabel(a, o.channel)}`}
+                onPress={() => onAction(o, a)}
+              />
             ))}
-          <ActionItem icon="receipt" title="Открыть заказ" subtitle="Состав, история, комментарий" onPress={() => { onClose(); router.push(`/order/${o.id}`); }} />
-          {canEdit && <ActionItem icon="edit" title="Изменить состав" subtitle="По согласованию с партнёром" onPress={() => { onClose(); router.push(`/admin/order-edit/${o.id}`); }} />}
-          {!!o.partner?.phone && <ActionItem icon="phone" title="Позвонить партнёру" subtitle={o.partner.contactName ?? undefined} onPress={() => callPhone(o.partner.phone!)} />}
-          {role !== 'ACCOUNTANT' && <ActionItem icon="shop" title="Карточка партнёра" onPress={() => { onClose(); router.push(`/admin/partner/${o.partner.id}`); }} />}
-          {actions.includes('REJECTED') && <ActionItem icon="close" danger title="Отклонить" subtitle="С причиной для партнёра" onPress={() => onAction(o, 'REJECTED')} />}
-          {actions.includes('CANCELLED') && <ActionItem icon="trash" danger title="Отменить заказ" onPress={() => onAction(o, 'CANCELLED')} />}
+          {money_ && <ActionItem icon="cash" tone="green" title="Деньги получены" subtitle={paymentTitle(o.paymentMethod)} onPress={() => onAction(o, 'MONEY')} />}
+          <ActionItem icon="receipt" title="Открыть заказ" subtitle="Состав, оплата, история" onPress={() => { onClose(); router.push(`/order/${o.id}`); }} />
+          {canEdit && <ActionItem icon="edit" title="Изменить состав" subtitle="До подтверждения, по согласованию" onPress={() => { onClose(); router.push(`/admin/order-edit/${o.id}`); }} />}
+          {!!phone && <ActionItem icon="phone" title={o.channel === 'CAFE' ? 'Позвонить гостю' : 'Позвонить партнёру'} subtitle={o.partner?.contactName ?? o.buyer} onPress={() => callPhone(phone)} />}
+          {role !== 'ACCOUNTANT' && role !== 'CASHIER' && !!o.partner?.id && (
+            <ActionItem icon="shop" title="Карточка партнёра" onPress={() => { onClose(); router.push(`/admin/partner/${o.partner!.id}`); }} />
+          )}
+          {moves.includes('REJECTED') && <ActionItem icon="close" danger title="Отклонить" subtitle="С причиной для покупателя" onPress={() => onAction(o, 'REJECTED')} />}
+          {moves.includes('CANCELLED') && <ActionItem icon="trash" danger title="Отменить" onPress={() => onAction(o, 'CANCELLED')} />}
         </View>
       )}
     </Sheet>
@@ -363,6 +436,8 @@ function OrderMenu({ order, role, onClose, onAction }: { order: OfficeOrder | nu
 const st = StyleSheet.create({
   row: { backgroundColor: colors.white, borderRadius: radius.xl, padding: space.lg, gap: space.md, ...shadows.soft },
   rowFresh: { borderWidth: 1.5, borderColor: colors.primarySoft },
+  rowClaimed: { borderColor: colors.blueberry, backgroundColor: '#F4F9FF' },
+  channel: { width: 22, height: 22, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   thumb: { width: 30, height: 30, borderWidth: 2, borderColor: colors.white },
   more: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.oatMilk, alignItems: 'center', justifyContent: 'center' },
   dayBox: { width: 44, height: 48, borderRadius: 14, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', ...shadows.soft },

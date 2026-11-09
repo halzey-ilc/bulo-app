@@ -20,7 +20,12 @@ const qs = (o: Record<string, string | number | undefined | null | false>) => {
 
 export interface Dashboard {
   today: string;
+  /** Ждут подтверждения (оплаты) */
   newOrders: number;
+  /** Из них покупатель сообщил об оплате */
+  claimed?: number;
+  /** Брони кофейни в работе */
+  cafeActive?: number;
   awaitingPayment: { count: number; total: number };
   paid: number;
   inProduction: number;
@@ -115,6 +120,8 @@ export interface AdminCategory {
   sortOrder: number;
   visible?: boolean;
   imageUrl: string | null;
+  section?: string | null;
+  promoCoffee?: boolean;
   _count?: { products: number };
 }
 
@@ -155,21 +162,93 @@ export interface Settings {
   instagram: string | null;
   whatsapp: string | null;
   telegram: string | null;
+  qrPayload?: string | null;
+  qrWithAmount?: boolean;
+  bankName?: string | null;
+  bankRecipient?: string | null;
+  bankAccount?: string | null;
+  bankBik?: string | null;
+  bankInn?: string | null;
+  promoEnabled?: boolean;
+  promoEvery?: number;
+  workshopWarehouseId?: string | null;
+}
+
+export interface Money {
+  orders: number;
+  total: number;
+  paid: number;
+  unpaid: number;
 }
 
 export interface SalesReport {
   from: string;
   to: string;
-  totals: { orders: number; total: number; paid: number; unpaid: number };
+  totals: Money;
+  channels?: { cafe: Money & { discount: number; freeCoffees: number }; partners: Money };
+  byBranch?: ({ branchId: string; name: string } & Money)[];
   byPartner: { partnerId: string; name: string; orders: number; total: number; paid: number; debt: number }[];
   byProduct: { productId: string; name: string; unit: string; qty: number; total: number }[];
-  byDay: { date: string; orders: number; total: number }[];
+  byDay: { date: string; orders: number; total: number; cafe?: number; partners?: number }[];
+}
+
+export interface RevenuePeriod {
+  from: string;
+  to: string;
+  total: number;
+  orders: number;
+  cafe: Money & { discount: number; freeCoffees: number };
+  partners: Money;
+  byBranch: ({ branchId: string; name: string } & Money)[];
+}
+
+export interface Revenue {
+  today: RevenuePeriod;
+  week: RevenuePeriod;
+  month: RevenuePeriod;
+  /** Ждут подтверждения */
+  awaiting: number;
+  /** Из них покупатель уже сообщил об оплате */
+  claimed: number;
+}
+
+export interface AdminBranch {
+  id: string;
+  name: string;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+  phone: string | null;
+  opensAt: string;
+  closesAt: string;
+  priceTypeId: string;
+  oneCWarehouseId: string | null;
+  active: boolean;
+  sortOrder: number;
+  menuSize: number;
+}
+
+export interface AdminStory {
+  id: string;
+  title: string;
+  caption: string | null;
+  imageUrl: string;
+  productId: string | null;
+  audience: 'ALL' | 'CAFE' | 'PARTNER';
+  active: boolean;
+  sortOrder: number;
+  expiresAt: string | null;
+  createdAt: string;
 }
 
 export interface DebtRow {
   orderId: string;
   number: number;
-  partnerId: string;
+  channel?: 'PARTNER' | 'CAFE';
+  status?: OrderStatus;
+  paymentMethod?: string | null;
+  claimedAt?: string | null;
+  partnerId: string | null;
   partner: string;
   phone: string | null;
   deliveryDate: string;
@@ -193,9 +272,11 @@ export interface OneCStatus {
   lastIn: SyncLog | null;
   lastOut: SyncLog | null;
   apiKeyConfigured?: boolean;
+  pushConfigured?: boolean;
+  stockItems?: number;
 }
 
-export type OneCDocType = 'CUSTOMER_ORDER' | 'PRODUCTION' | 'SALE';
+export type OneCDocType = 'CUSTOMER_ORDER' | 'PRODUCTION' | 'SALE' | 'CANCEL';
 export type OneCDocStatus = 'PENDING' | 'SENT' | 'ERROR';
 
 export interface OneCDoc {
@@ -207,7 +288,7 @@ export interface OneCDoc {
   oneCNumber: string | null;
   createdAt: string;
   sentAt: string | null;
-  order: { id: string; number: number; partner: { name: string } } | null;
+  order: { id: string; number: number; partner: { name: string } | null } | null;
   productionSheet: { id: string; number: number } | null;
 }
 
@@ -224,7 +305,7 @@ export interface Invoice {
 }
 
 /** Заказ в офисном списке: сервер отдаёт и служебные поля. */
-export type OfficeOrder = Order & { paidAt?: string | null; updatedAt?: string; partnerId?: string; partner: Order['partner'] & { priceTypeId?: string | null } };
+export type OfficeOrder = Order & { paidAt?: string | null; updatedAt?: string; partnerId?: string | null };
 
 export interface CreateUserInput {
   name: string;
@@ -298,14 +379,50 @@ export const Admin = {
   saveSettings: (dto: Partial<Settings>) => put<Settings>('/admin/settings', dto),
 
   sales: (from: string, to: string) => api.get<SalesReport>(`/reports/sales${qs({ from, to })}`),
+  revenue: () => api.get<Revenue>('/reports/revenue'),
   debts: () => api.get<DebtRow[]>('/reports/debts'),
+
+  branches: () => api.get<AdminBranch[]>('/admin/branches'),
+  createBranch: (dto: Partial<AdminBranch> & { name: string }) => api.post<AdminBranch>('/admin/branches', dto),
+  updateBranch: (id: string, dto: Partial<Omit<AdminBranch, 'id' | 'menuSize' | 'priceTypeId'>>) => api.patch<AdminBranch>(`/admin/branches/${id}`, dto),
+  copyBranchPrices: (id: string, dto: { fromBranchId: string; percent: number; round10?: boolean; overwrite?: boolean }) =>
+    api.post<{ copied: number; total: number }>(`/admin/branches/${id}/copy-prices`, dto),
+
+  stories: () => api.get<AdminStory[]>('/admin/stories'),
+  updateStory: (id: string, dto: Partial<Pick<AdminStory, 'title' | 'caption' | 'productId' | 'audience' | 'active' | 'sortOrder' | 'expiresAt'>>) =>
+    api.patch<AdminStory>(`/admin/stories/${id}`, dto),
+  deleteStory: (id: string) => api.del<{ ok: true }>(`/admin/stories/${id}`),
+  createStory: (img: PickedImage, fields: { title: string; caption?: string; productId?: string; audience?: string }, onProgress?: (p: number) => void) =>
+    uploadImage<AdminStory>(
+      '/admin/stories',
+      img,
+      Object.fromEntries(Object.entries(fields).filter(([, v]) => !!v)) as Record<string, string>,
+      onProgress,
+    ),
+
+  /** Подтвердить заказ после оплаты (дальше цех и 1С). paid — для наличных, если деньги уже на руках. */
+  confirmOrder: (id: string, dto: { paymentMethod?: 'QR' | 'BANK' | 'CASH'; paid?: boolean; comment?: string } = {}) =>
+    api.post<OfficeOrder>(`/orders/${id}/confirm`, dto),
+  onecSync: () => api.post<{ configured: boolean; message?: string; docs?: { sent: number; failed: number } }>('/admin/onec/sync'),
   invoices: (date: string) => api.get<Invoice[]>(`/invoices${qs({ date })}`),
 
   onecStatus: () => api.get<OneCStatus>('/admin/onec/status'),
   onecDocs: (status?: OneCDocStatus) => api.get<OneCDoc[]>(`/admin/onec/documents${qs({ status })}`),
   onecRetry: (id: string) => api.post<OneCDoc>(`/admin/onec/documents/${id}/retry`),
 
-  orders: (q: { status?: OrderStatus[]; dateFrom?: string; dateTo?: string; search?: string; partnerId?: string; paid?: boolean } = {}) =>
+  orders: (
+    q: {
+      status?: OrderStatus[];
+      dateFrom?: string;
+      dateTo?: string;
+      search?: string;
+      partnerId?: string;
+      paid?: boolean;
+      channel?: 'CAFE' | 'PARTNER';
+      branchId?: string;
+      awaiting?: boolean;
+    } = {},
+  ) =>
     api.get<OfficeOrder[]>(
       `/orders${qs({
         status: q.status?.join(','),
@@ -314,6 +431,9 @@ export const Admin = {
         search: q.search,
         partnerId: q.partnerId,
         paid: q.paid === undefined ? undefined : String(q.paid),
+        channel: q.channel,
+        branchId: q.branchId,
+        awaiting: q.awaiting ? 'true' : undefined,
       })}`,
     ),
   updateItems: (id: string, items: { productId: string; qty: number }[], comment?: string) =>
@@ -391,11 +511,17 @@ export interface PickedImage {
 
 /** Загрузка фото товара с прогрессом (XHR — единственный способ получить прогресс отправки и в вебе, и на телефоне). */
 export function uploadProductPhoto(productId: string, img: PickedImage, onProgress?: (p: number) => void): Promise<AdminProduct> {
+  return uploadImage(`/admin/catalog/products/${productId}/photo`, img, {}, onProgress);
+}
+
+/** Отправка картинки (multipart, поле file) и дополнительных полей формы. */
+export function uploadImage<T>(path: string, img: PickedImage, fields: Record<string, string> = {}, onProgress?: (p: number) => void): Promise<T> {
   return new Promise((resolve, reject) => {
     const form = new FormData();
     const type = img.mimeType || (img.uri.endsWith('.png') ? 'image/png' : 'image/jpeg');
     const ext = type.includes('png') ? 'png' : type.includes('webp') ? 'webp' : 'jpg';
     const name = img.fileName || `photo.${ext}`;
+    for (const [k, v] of Object.entries(fields)) form.append(k, v);
     if (Platform.OS === 'web') {
       const finish = (blob: Blob) => {
         form.append('file', blob, name);
@@ -414,7 +540,7 @@ export function uploadProductPhoto(productId: string, img: PickedImage, onProgre
 
     function send() {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${API_URL}/admin/catalog/products/${productId}/photo`);
+      xhr.open('POST', `${API_URL}${path}`);
       const token = getToken();
       if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       xhr.setRequestHeader('Accept', 'application/json');
@@ -426,7 +552,7 @@ export function uploadProductPhoto(productId: string, img: PickedImage, onProgre
         try {
           body = JSON.parse(xhr.responseText);
         } catch {}
-        if (xhr.status >= 200 && xhr.status < 300) resolve(body as AdminProduct);
+        if (xhr.status >= 200 && xhr.status < 300) resolve(body as T);
         else reject(new ApiError(typeof body?.message === 'string' ? body.message : 'Не удалось загрузить фото', xhr.status));
       };
       xhr.onerror = () => reject(new ApiError('Нет связи с сервером. Проверьте интернет', 0));

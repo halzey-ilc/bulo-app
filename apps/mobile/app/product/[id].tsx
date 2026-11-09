@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NoOrderNote, PartnerStatusCard, SignInCta } from '../../src/components/gates';
+import { useIsCafe } from '../../src/lib/branch';
 import { Icon, IconName } from '../../src/components/Icon';
 import { BottomBar } from '../../src/components/layout';
 import { FavoriteButton, NewBadge, ProductCard, ProductImage, Stepper, useAddToCart } from '../../src/components/product';
@@ -19,7 +20,8 @@ export default function ProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const user = useAuth((s) => s.user);
-  const canOrder = !!user?.permissions.canOrder;
+  const cafe = useIsCafe();
+  const canOrder = !!user?.permissions.canOrder || (cafe && !user);
   // Карточка открывается мгновенно: данные берём из уже загруженного каталога, потом тихо уточняем.
   const { data: p, error, loading, refresh } = useQuery(Q.product(id, user?.id ?? 'anon'), {
     refetchOnFocus: false,
@@ -155,7 +157,7 @@ export default function ProductScreen() {
             </View>
           )}
 
-          {!user && <SignInCta />}
+          {!user && !cafe && <SignInCta />}
           {user && <PartnerStatusCard user={user} />}
           {user?.role === 'GUEST' && !canOrder && <NoOrderNote />}
 

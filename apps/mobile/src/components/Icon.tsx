@@ -260,6 +260,34 @@ const P: Record<string, React.ReactNode> = {
       <Path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
     </>
   ),
+  qr: (
+    <>
+      <Rect x={4} y={4} width={6} height={6} rx={1.2} />
+      <Rect x={14} y={4} width={6} height={6} rx={1.2} />
+      <Rect x={4} y={14} width={6} height={6} rx={1.2} />
+      <Path d="M14 14h2.5v2.5H14zM17.5 17.5H20V20h-2.5zM14 19.5h1M19.5 14v1.5" />
+    </>
+  ),
+  bank: (
+    <>
+      <Path d="M4 9.5 12 5l8 4.5M5.5 10v7M9.5 10v7M14.5 10v7M18.5 10v7M4 19.5h16" />
+    </>
+  ),
+  cash: (
+    <>
+      <Rect x={3} y={6.5} width={18} height={11} rx={2.5} />
+      <Circle cx={12} cy={12} r={2.6} />
+      <Path d="M6.5 9.5v.01M17.5 14.5v.01" />
+    </>
+  ),
+  share: <Path d="M12 15V4.5M8 8l4-4 4 4M5 12.5V18a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 18v-5.5" />,
+  camera: (
+    <>
+      <Path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.5-2h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" />
+      <Circle cx={12} cy={13} r={3.5} />
+    </>
+  ),
+  chart: <Path d="M4 19.5h16M7 16v-5M11 16V7M15 16v-7M19 16V5" />,
 };
 
 export type IconName = keyof typeof P;
@@ -301,9 +329,9 @@ export function categoryIcon(name?: string | null): IconName {
   if (n.includes('синнаб') || n.includes('булоч') || n.includes('рол')) return 'spiral';
   if (n.includes('торт') || n.includes('десерт') || n.includes('пирож')) return 'cake';
   if (n.includes('сэндв') || n.includes('сендв') || n.includes('бутер')) return 'sandwich';
-  if (n.includes('печен')) return 'cookie';
+  if (n.includes('печен') || n.includes('кукис')) return 'cookie';
   if (n.includes('хлеб')) return 'bread';
-  if (n.includes('кофе') || n.includes('напит')) return 'coffee';
+  if (/кофе|напит|чай|матча|какао|шокол|айс|лимонад|милкшейк|смузи|добавк/.test(n)) return 'coffee';
   if (n.includes('круас') || n.includes('выпеч')) return 'croissant';
   return 'wheat';
 }

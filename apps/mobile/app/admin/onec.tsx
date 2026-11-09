@@ -18,6 +18,7 @@ const TYPE_LABEL: Record<OneCDoc['type'], string> = {
   CUSTOMER_ORDER: 'Заказ клиента',
   PRODUCTION: 'Заказ на производство',
   SALE: 'Реализация',
+  CANCEL: 'Отмена (возврат)',
 };
 
 /** 1С: документы к передаче, ошибки с повтором, Excel-выгрузка. */
@@ -104,7 +105,7 @@ export default function OneCScreen() {
                 <View style={{ flex: 1 }}>
                   <T v="bodyStrong">{TYPE_LABEL[d.type]}</T>
                   <T v="small" color={colors.textMuted}>
-                    {d.order ? `Заказ №${d.order.number} · ${d.order.partner.name}` : d.productionSheet ? `Сводная №${d.productionSheet.number}` : '—'}
+                    {d.order ? `Заказ №${d.order.number} · ${d.order.partner?.name ?? "гость кофейни"}` : d.productionSheet ? `Сводная №${d.productionSheet.number}` : '—'}
                   </T>
                 </View>
                 <Pill

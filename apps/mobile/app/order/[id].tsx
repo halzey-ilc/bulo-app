@@ -11,14 +11,15 @@ import { OfficeOrderTools } from '../../src/components/admin/OfficeExtras';
 import { callPhone, openMaps } from '../../src/components/contacts';
 import { Icon } from '../../src/components/Icon';
 import { BottomBar, Header, Screen } from '../../src/components/layout';
-import { STATUS_STYLE, StatusChip } from '../../src/components/order';
+import { orderTitle, orderWhen, STATUS_STYLE } from '../../src/components/order';
+import { PaymentPanel, paymentTitle, StaffPaymentPanel } from '../../src/components/cafe';
 import { ProductImage } from '../../src/components/product';
 import { Button, Card, Divider, ErrorState, Row, Skeleton, T, Touchable } from '../../src/components/ui';
-import { dateLong, dateTime, dayLabel, deliveryPhrase, formatPhone, money, qtyText } from '../../src/lib/format';
-import { actionKind, runOrderAction } from '../../src/lib/orderActions';
+import { dateTime, deliveryPhrase, formatPhone, money, qtyText } from '../../src/lib/format';
+import { actionKind, runConfirm, runMarkPaid, runOrderAction } from '../../src/lib/orderActions';
 import { repeatOrder } from '../../src/lib/repeat';
 import { isOffice, usePersona } from '../../src/store/auth';
-import { ACTION_LABELS, ORDER_FLOW, ORDER_STATUS_LABELS, OrderStatus } from '../../src/shared';
+import { actionLabel, flowOf, OrderStatus, statusLabel } from '../../src/shared';
 import { colors, fonts, radius, space } from '../../src/theme';
 
 export default function OrderDetail() {
@@ -45,46 +46,57 @@ export default function OrderDetail() {
   }
 
   const buyer = persona === 'buyer';
+  const cafe = order.channel === 'CAFE';
   const actions = (order.actions ?? []).filter((a) => !(buyer && a !== 'CANCELLED'));
   const onDone = () => {
     invalidateOrders();
+    invalidate(`payment:${order.id}`);
     refresh();
   };
   const st = STATUS_STYLE[order.status];
+  const buyerPhone = order.partner?.phone ?? order.createdBy?.phone ?? null;
+  const subline = cafe
+    ? order.status === 'DELIVERED'
+      ? `Выдана · ${order.branch?.name ?? ''}`
+      : order.status === 'READY'
+        ? `Ждём вас в «${order.branch?.name ?? 'кофейне'}»`
+        : `Заберёте ${orderWhen(order)}`
+    : order.status === 'NEW'
+      ? order.paymentMethod === 'CASH'
+        ? 'Менеджер подтвердит заказ — и он уйдёт в цех'
+        : 'Оплатите — и заказ уйдёт в цех'
+      : `Доставка ${deliveryPhrase(order.deliveryDate)}`;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <Header title={`Заказ №${order.number}`} subtitle={`от ${dateTime(order.createdAt)}`} />
+      <Header title={orderTitle(order)} subtitle={`от ${dateTime(order.createdAt)}`} />
       <Screen refreshing={refreshing} onRefresh={refresh} contentStyle={{ paddingBottom: actions.length || buyer ? 170 : 40 }}>
         {/* Главная карточка */}
         <View style={[styles.hero, { backgroundColor: st.bg }]}>
           <View style={styles.heroIcon}>
-            <Icon name={st.icon} size={28} color={st.fg === colors.oatMilk ? colors.cambodia : st.fg} strokeWidth={1.8} />
+            <Icon name={cafe && order.status === 'READY' ? 'bag' : st.icon} size={28} color={st.fg === colors.oatMilk ? colors.cambodia : st.fg} strokeWidth={1.8} />
           </View>
           <T v="h1" color={st.fg}>
-            {ORDER_STATUS_LABELS[order.status]}
+            {statusLabel(order.status, order.channel)}
           </T>
           <T v="body" color={st.fg} style={{ opacity: 0.85 }}>
-            Доставка {deliveryPhrase(order.deliveryDate)}
+            {subline}
           </T>
         </View>
 
         {/* Доставка: курьер везёт — живой трекинг; заказ собран — скоро передадим */}
-        {(buyer || isOffice(persona)) && (order.status === 'SHIPPED' || order.status === 'READY') && <TrackCard order={order} />}
+        {!cafe && (buyer || isOffice(persona)) && (order.status === 'SHIPPED' || order.status === 'READY') && <TrackCard order={order} />}
 
-        {/* Оплата: способ ещё не выбран — место под онлайн-оплату. Заказ готовят и без неё. */}
-        {buyer && !order.paidAt && order.status !== 'REJECTED' && order.status !== 'CANCELLED' && (
-          <Card style={styles.payment}>
-            <View style={[styles.payIcon]}>
-              <Icon name="card" size={24} color={colors.mango} />
-            </View>
-            <View style={{ flex: 1, gap: 2 }}>
-              <T v="h3">К оплате · {money(order.total)}</T>
-              <T v="small" color={colors.textMuted}>
-                Заказ уже готовят. Способ оплаты уточняется — менеджер свяжется с вами.
-              </T>
-            </View>
-          </Card>
+        {/* Оплата: QR с суммой, реквизиты, «Я оплатил» */}
+        {buyer && <PaymentPanel order={order} onChanged={() => refresh()} />}
+        {!buyer && (
+          <StaffPaymentPanel
+            order={order}
+            canConfirm={!!order.canConfirm}
+            canMarkPaid={!!order.canMarkPaid}
+            onConfirm={() => runConfirm(order, onDone)}
+            onMarkPaid={() => runMarkPaid(order, onDone)}
+          />
         )}
 
         {(order.status === 'REJECTED' || order.status === 'CANCELLED') && (
@@ -103,23 +115,34 @@ export default function OrderDetail() {
           {persona !== 'buyer' && (
             <>
               <Row
-                icon="shop"
+                icon={cafe ? 'user' : 'shop'}
                 tint={colors.softYellow}
-                title={order.partner?.name}
-                subtitle={order.partner?.phone ? `${formatPhone(order.partner.phone)} · позвонить` : order.partner?.contactName}
-                onPress={order.partner?.phone ? () => callPhone(order.partner.phone!) : undefined}
+                title={order.buyer}
+                subtitle={buyerPhone ? `${formatPhone(buyerPhone)} · позвонить` : cafe ? 'Гость кофейни' : order.partner?.contactName ?? undefined}
+                onPress={buyerPhone ? () => callPhone(buyerPhone) : undefined}
               />
               <Divider inset={68} />
             </>
           )}
-          <Row
-            icon="pin"
-            tint={colors.iceCube}
-            iconColor={colors.blueberry}
-            title={order.deliveryAddress || 'Адрес не указан'}
-            subtitle="Адрес доставки"
-            onPress={order.deliveryAddress ? () => openMaps(order.deliveryAddress!) : undefined}
-          />
+          {cafe ? (
+            <Row
+              icon="coffee"
+              tint={colors.iceCube}
+              iconColor={colors.blueberry}
+              title={order.branch ? `${order.branch.name}${order.branch.address ? `, ${order.branch.address}` : ''}` : 'Самовывоз'}
+              subtitle={`Самовывоз · ${orderWhen(order)}`}
+              onPress={order.branch?.address ? () => openMaps(order.branch!.address!) : undefined}
+            />
+          ) : (
+            <Row
+              icon="pin"
+              tint={colors.iceCube}
+              iconColor={colors.blueberry}
+              title={order.deliveryAddress || 'Адрес не указан'}
+              subtitle="Адрес доставки"
+              onPress={order.deliveryAddress ? () => openMaps(order.deliveryAddress!) : undefined}
+            />
+          )}
           {!!order.comment && (
             <>
               <Divider inset={68} />
@@ -142,7 +165,13 @@ export default function OrderDetail() {
           {!!order.paymentMethod && (
             <>
               <Divider inset={68} />
-              <Row icon="card" tint={colors.primarySoft} iconColor={colors.mango} title={order.paymentMethod} subtitle="Способ оплаты" />
+              <Row
+                icon={order.paymentMethod === 'QR' ? 'qr' : order.paymentMethod === 'BANK' ? 'bank' : 'cash'}
+                tint={colors.primarySoft}
+                iconColor={colors.mango}
+                title={paymentTitle(order.paymentMethod)}
+                subtitle={order.paidAt ? 'Оплачено' : 'Способ оплаты'}
+              />
             </>
           )}
         </Card>
@@ -151,7 +180,7 @@ export default function OrderDetail() {
 
         {/* Таймлайн */}
         <Card style={{ gap: space.md }}>
-          <T v="h3">Путь заказа</T>
+          <T v="h3">{cafe ? 'Путь брони' : 'Путь заказа'}</T>
           <Timeline order={order} />
         </Card>
 
@@ -170,11 +199,29 @@ export default function OrderDetail() {
                   <T v="small" color={colors.textSoft}>
                     {qtyText(i.qty, i.unit)} × {money(i.price)}
                   </T>
+                  {!!i.freeQty && (
+                    <T v="small" color={colors.coffee} style={{ fontFamily: fonts.bold }}>
+                      🎁 {i.freeQty} в подарок
+                    </T>
+                  )}
                 </View>
                 <T v="bodyStrong">{money(i.sum)}</T>
               </View>
             </View>
           ))}
+          {order.discount > 0 && (
+            <>
+              <Divider />
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <T v="bodyStrong" color={colors.coffee}>
+                  {order.freeCoffees > 1 ? `Кофе в подарок × ${order.freeCoffees}` : 'Кофе в подарок'}
+                </T>
+                <T v="bodyStrong" color={colors.coffee}>
+                  −{money(order.discount)}
+                </T>
+              </View>
+            </>
+          )}
           <Divider />
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <T v="h3">Итого</T>
@@ -188,14 +235,14 @@ export default function OrderDetail() {
       {(actions.length > 0 || buyer) && (
         <BottomBar>
           {buyer && (
-            <Button title="Повторить заказ" icon="repeat" kind={actions.length ? 'secondary' : 'primary'} onPress={() => repeatOrder(order)} />
+            <Button title={cafe ? 'Повторить бронь' : 'Повторить заказ'} icon="repeat" kind={actions.length ? 'secondary' : 'primary'} onPress={() => repeatOrder(order)} />
           )}
           {actions.length > 0 && (
             <View style={{ flexDirection: 'row', gap: space.sm }}>
               {actions.map((a) => (
                 <Button
                   key={a}
-                  title={buyer && a === 'CANCELLED' ? 'Отменить заказ' : ACTION_LABELS[a] ?? a}
+                  title={buyer && a === 'CANCELLED' ? (cafe ? 'Отменить бронь' : 'Отменить заказ') : actionLabel(a, order.channel)}
                   kind={buyer ? 'ghost' : actionKind(a)}
                   style={{ flex: 1 }}
                   onPress={() => runOrderAction(order, a, onDone)}
@@ -236,14 +283,15 @@ function Timeline({ order }: { order: Order }) {
   const terminal = order.status === 'REJECTED' || order.status === 'CANCELLED';
   const reached = new Map<OrderStatus, Order['history'][number]>();
   for (const h of order.history) reached.set(h.to, h);
-  const currentIdx = ORDER_FLOW.indexOf(order.status);
+  const FLOW = flowOf(order.channel);
+  const currentIdx = FLOW.indexOf(order.status === 'APPROVED' ? 'PAID' : order.status);
 
   let steps: { status: OrderStatus; state: 'done' | 'current' | 'todo' | 'fail' }[];
   if (terminal) {
-    steps = ORDER_FLOW.filter((s) => reached.has(s)).map((s) => ({ status: s, state: 'done' as const }));
+    steps = FLOW.filter((s) => reached.has(s)).map((s) => ({ status: s, state: 'done' as const }));
     steps.push({ status: order.status, state: 'fail' });
   } else {
-    steps = ORDER_FLOW.map((s, i) => ({
+    steps = FLOW.map((s, i) => ({
       status: s,
       state: i < currentIdx ? 'done' : i === currentIdx ? (s === 'DELIVERED' ? 'done' : 'current') : 'todo',
     }));
@@ -285,7 +333,7 @@ function Timeline({ order }: { order: Order }) {
                 color={s.state === 'todo' ? colors.textSoft : s.state === 'fail' ? colors.danger : colors.text}
                 style={s.state === 'current' ? { fontFamily: fonts.extrabold } : undefined}
               >
-                {ORDER_STATUS_LABELS[s.status]}
+                {statusLabel(s.status, order.channel)}
               </T>
               {h && (
                 <T v="small" color={colors.textSoft}>
@@ -314,7 +362,7 @@ function useStatusChangeNotice(order: Order | undefined) {
     const p = prev.current;
     if (p && p.id === order.id && p.status !== order.status) {
       hapticSuccess();
-      toast.success(`Заказ №${order.number}: ${ORDER_STATUS_LABELS[order.status].toLowerCase()}`);
+      toast.success(`${orderTitle(order)}: ${statusLabel(order.status, order.channel).toLowerCase()}`);
       invalidate('orders:');
       invalidate('notif:');
     }

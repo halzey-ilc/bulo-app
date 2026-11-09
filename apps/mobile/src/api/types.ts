@@ -25,6 +25,10 @@ export interface User {
   permissions: { canSeePrices: boolean; canOrder: boolean };
   /** Задан ли пароль: если нет, при смене текущий пароль не спрашиваем */
   hasPassword?: boolean;
+  /** Покупатель: гость кофейни (CAFE) или партнёр (PARTNER); у сотрудников null */
+  channel?: 'CAFE' | 'PARTNER' | null;
+  /** Любимый филиал гостя */
+  branchId?: string | null;
 }
 
 export interface AuthResponse {
@@ -36,6 +40,9 @@ export interface OtpResponse {
   sent: boolean;
   phone: string;
   devCode?: string;
+  /** Номера ещё нет — после кода создадим аккаунт гостя, нужно имя */
+  isNew?: boolean;
+  name?: string | null;
 }
 
 export interface Category {
@@ -44,7 +51,80 @@ export interface Category {
   workshopArea: string | null;
   sortOrder: number;
   imageUrl: string | null;
+  section?: string | null;
+  promoCoffee?: boolean;
   _count?: { products: number };
+}
+
+/** Филиал кофейни. */
+export interface Branch {
+  id: string;
+  name: string;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+  phone: string | null;
+  opensAt: string;
+  closesAt: string;
+  menuSize: number;
+}
+
+export interface PickupSlot {
+  at: string;
+  time: string;
+  date: string;
+}
+
+export interface PickupSlots {
+  opensAt: string;
+  closesAt: string;
+  today: PickupSlot[];
+  tomorrow: PickupSlot[];
+  closedToday: boolean;
+}
+
+/** История на главной (ведут админ и менеджер). */
+export interface StoryItem {
+  id: string;
+  title: string;
+  caption: string | null;
+  imageUrl: string;
+  productId: string | null;
+  audience: string;
+  createdAt: string;
+}
+
+/** Карта гостя «N-й кофе бесплатно». */
+export interface Loyalty {
+  enabled: boolean;
+  every: number;
+  total: number;
+  stamps: number;
+  untilFree: number;
+  nextIsFree: boolean;
+}
+
+export type PaymentMethod = 'QR' | 'BANK' | 'CASH';
+
+/** Как оплатить заказ. */
+export interface PaymentInfo {
+  orderId: string;
+  number: number;
+  amount: number;
+  method: PaymentMethod | null;
+  paidAt: string | null;
+  claimedAt: string | null;
+  receiptUrl: string | null;
+  /** value — строка QR (ссылка банка), image — готовая картинка PNG (data:) */
+  qr: { value: string; image: string | null; withAmount: boolean; recipient: string } | null;
+  bank: {
+    name: string | null;
+    recipient: string | null;
+    account: string | null;
+    bik: string | null;
+    inn: string | null;
+    purpose: string;
+  } | null;
 }
 
 export interface Product {
@@ -62,6 +142,12 @@ export interface Product {
   category: Category;
   price: number | null;
   pricesHidden: boolean;
+  /** Кофе по акции «7-й бесплатно» */
+  promo?: boolean;
+  /** Свободный остаток из 1С; null — не отслеживается */
+  stock?: number | null;
+  /** Филиал, по которому посчитана цена (меню кофейни) */
+  branchId?: string | null;
 }
 
 export interface OrderItem {
@@ -75,6 +161,9 @@ export interface OrderItem {
   photoUrl: string | null;
   category: string;
   multiplicity: number;
+  promo?: boolean;
+  /** Сколько штук в подарок по акции */
+  freeQty?: number;
 }
 
 export interface OrderHistory {
@@ -97,21 +186,36 @@ export interface Order {
   comment: string | null;
   total: number;
   rejectReason: string | null;
-  paymentMethod: string | null;
+  paymentMethod: PaymentMethod | string | null;
   createdAt: string;
-  partner: Partner & { priceType?: { name: string } | null };
+  /** PARTNER — опт с доставкой, CAFE — бронь гостя в филиале */
+  channel: 'PARTNER' | 'CAFE';
+  /** Название партнёра или имя гостя */
+  buyer: string;
+  partner: (Partner & { priceType?: { name: string } | null }) | null;
+  branch: { id: string; name: string; address: string | null; phone: string | null; lat: number | null; lng: number | null } | null;
+  pickupAt: string | null;
+  discount: number;
+  freeCoffees: number;
+  confirmedAt: string | null;
+  paymentClaimedAt: string | null;
+  receiptUrl: string | null;
   items: OrderItem[];
-  createdBy: { id: string; name: string | null; role: Role } | null;
+  createdBy: { id: string; name: string | null; role: Role; phone?: string | null } | null;
   courier: { id: string; name: string | null; phone: string | null } | null;
   history: OrderHistory[];
   /** Только в GET /orders/:id */
   actions?: OrderStatus[];
+  canConfirm?: boolean;
+  canMarkPaid?: boolean;
 }
 
 export interface OrderRules {
   cutoffTime: string;
   minOrderSum: number;
   earliestDeliveryDate: string;
+  promo?: { enabled: boolean; every: number };
+  payment?: { qr: boolean; bank: boolean };
 }
 
 export interface Info {

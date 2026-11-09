@@ -112,7 +112,10 @@ export interface Order {
   deliveredAt: string | null;
   productionSheetId: string | null;
   createdAt: string;
-  partner?: Partner;
+  partner?: Partner | null;
+  /** Название партнёра или имя гостя кофейни */
+  buyer?: string;
+  channel?: 'PARTNER' | 'CAFE';
   items?: OrderItem[];
   createdBy?: UserRef;
   courier?: { id: string; name: string; phone: string | null } | null;

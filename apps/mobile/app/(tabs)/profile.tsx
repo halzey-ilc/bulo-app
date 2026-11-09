@@ -12,7 +12,8 @@ import { Button, Card, Divider, Row, T } from '../../src/components/ui';
 import { formatPhone, plural } from '../../src/lib/format';
 import { isOffice, useAuth, usePersona } from '../../src/store/auth';
 import { usePrefs } from '../../src/store/prefs';
-import { confirmDialog } from '../../src/store/ui';
+import { confirmDialog, toast } from '../../src/store/ui';
+import { Auth } from '../../src/api';
 import { PARTNER_STATUS_LABELS, ROLE_LABELS } from '../../src/shared';
 import { colors, fonts, radius, shadows, space } from '../../src/theme';
 
@@ -30,6 +31,25 @@ export default function Profile() {
     .slice(0, 2)
     .toUpperCase();
   const isBuyer = persona === 'buyer';
+  const cafeGuest = isBuyer && user.channel === 'CAFE';
+
+  const removeAccount = () =>
+    confirmDialog({
+      title: 'Удалить аккаунт?',
+      message: 'Имя и телефон будут стёрты, история заказов останется обезличенной, штампы карты гостя пропадут. Это нельзя отменить.',
+      input: { placeholder: 'Напишите УДАЛИТЬ', required: true },
+      confirmText: 'Удалить навсегда',
+      destructive: true,
+      onConfirm: async (v) => {
+        if (v.trim().toUpperCase() !== 'УДАЛИТЬ') {
+          toast.error('Напишите слово УДАЛИТЬ, чтобы подтвердить');
+          return;
+        }
+        await Auth.deleteMe();
+        await useAuth.getState().signOut();
+        toast.success('Аккаунт удалён');
+      },
+    });
 
   const logout = () =>
     confirmDialog({
@@ -94,17 +114,25 @@ export default function Profile() {
         <Row icon="edit" title="Имя и почта" subtitle={user.email || 'Почта не указана'} onPress={() => router.push('/profile-edit')} />
         <Divider inset={64} />
         <Row icon="phone" title="Сменить телефон" subtitle={user.phone ? formatPhone(user.phone) : 'Телефон не привязан'} onPress={() => router.push('/change-phone')} />
-        <Divider inset={64} />
-        <Row
-          icon="lock"
-          title="Сменить пароль"
-          subtitle={user.login ? `Логин: ${user.login}` : 'Для входа по логину и паролю'}
-          onPress={() => router.push('/change-password')}
-        />
-        {isBuyer && (
+        {!cafeGuest && (
+          <>
+            <Divider inset={64} />
+            <Row
+              icon="lock"
+              title="Сменить пароль"
+              subtitle={user.login ? `Логин: ${user.login}` : 'Для входа по логину и паролю'}
+              onPress={() => router.push('/change-password')}
+            />
+          </>
+        )}
+        {isBuyer && !cafeGuest && (
           <>
             <Divider inset={64} />
             <Row icon="pin" title="Адреса доставки" onPress={() => router.push('/addresses')} />
+          </>
+        )}
+        {isBuyer && (
+          <>
             <Divider inset={64} />
             <FavoritesRow />
           </>
@@ -115,8 +143,20 @@ export default function Profile() {
         <Row icon="at" title="Контакты BULO" subtitle="Телефон, адрес, соцсети" onPress={() => router.push('/contacts')} />
       </Card>
 
+      {cafeGuest && (
+        <Card padded={false} style={{ paddingVertical: 4 }}>
+          <Row icon="shop" title="Вы кофейня или магазин?" subtitle="Станьте партнёром — оптовые цены и доставка" onPress={() => router.push('/register')} />
+        </Card>
+      )}
+
       <Card padded={false} style={{ paddingVertical: 4 }}>
         <Row icon="logout" title="Выйти" danger onPress={logout} />
+        {isBuyer && (
+          <>
+            <Divider inset={64} />
+            <Row icon="trash" title="Удалить аккаунт" subtitle="Стереть имя, телефон и историю" danger onPress={removeAccount} />
+          </>
+        )}
       </Card>
 
       <Footer />

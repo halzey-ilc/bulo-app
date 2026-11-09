@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import type { Order } from '../api';
 import { dayLabel, money, plural } from '../lib/format';
-import { ORDER_FLOW, ORDER_STATUS_LABELS, OrderStatus } from '../shared';
+import { Channel, flowOf, OrderStatus, statusLabel } from '../shared';
 import { colors, fonts, radius, space } from '../theme';
 import { Icon, IconName } from './Icon';
 import { ProductImage } from './product';
@@ -21,25 +21,27 @@ export const STATUS_STYLE: Record<OrderStatus, { bg: string; fg: string; icon: I
   CANCELLED: { bg: '#ECE8DC', fg: colors.textMuted, icon: 'close' },
 };
 
-export function StatusChip({ status, small }: { status: OrderStatus; small?: boolean }) {
+export function StatusChip({ status, small, channel }: { status: OrderStatus; small?: boolean; channel?: Channel }) {
   const s = STATUS_STYLE[status];
+  const icon = channel === 'CAFE' && status === 'READY' ? 'bag' : channel === 'CAFE' && status === 'DELIVERED' ? 'check' : s.icon;
   return (
     <View style={[styles.chip, { backgroundColor: s.bg }, small && { paddingVertical: 3, paddingHorizontal: 8 }]}>
-      <Icon name={s.icon} size={small ? 12 : 14} color={s.fg} strokeWidth={2} />
+      <Icon name={icon} size={small ? 12 : 14} color={s.fg} strokeWidth={2} />
       <T v="caption" color={s.fg} style={{ fontFamily: fonts.bold, fontSize: small ? 11 : 12 }}>
-        {ORDER_STATUS_LABELS[status]}
+        {statusLabel(status, channel)}
       </T>
     </View>
   );
 }
 
-/** Мини-шкала прогресса заказа (точки по ORDER_FLOW). */
-export function FlowDots({ status }: { status: OrderStatus }) {
-  const idx = ORDER_FLOW.indexOf(status);
+/** Мини-шкала прогресса заказа (точки по шагам канала). */
+export function FlowDots({ status, channel }: { status: OrderStatus; channel?: Channel }) {
+  const flow = flowOf(channel);
+  const idx = flow.indexOf(status === 'APPROVED' ? 'PAID' : status);
   if (idx < 0) return null;
   return (
     <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
-      {ORDER_FLOW.map((s, i) => (
+      {flow.map((s, i) => (
         <View
           key={s}
           style={{
@@ -68,12 +70,13 @@ export function OrderCard({
     <Card onPress={() => router.push(`/order/${order.id}`)} style={{ gap: space.md }}>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.md }}>
         <View style={{ flex: 1, gap: 2 }}>
-          <T v="h3">Заказ №{order.number}</T>
+          <T v="h3">{orderTitle(order)}</T>
           <T v="small" color={colors.textMuted}>
-            {showPartner ? `${order.partner?.name} · ` : ''}на {dayLabel(order.deliveryDate).toLowerCase()}
+            {showPartner ? `${order.buyer ?? order.partner?.name} · ` : ''}
+            {orderWhen(order)}
           </T>
         </View>
-        <StatusChip status={order.status} small />
+        <StatusChip status={order.status} small channel={order.channel} />
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <View style={{ flexDirection: 'row' }}>
@@ -103,10 +106,25 @@ export function OrderCard({
           </T>
         </View>
       </View>
-      <FlowDots status={order.status} />
+      <FlowDots status={order.status} channel={order.channel} />
       {footer}
     </Card>
   );
+}
+
+/** «Бронь №12» / «Заказ №12». */
+export function orderTitle(o: Pick<Order, 'channel' | 'number'>) {
+  return `${o.channel === 'CAFE' ? 'Бронь' : 'Заказ'} №${o.number}`;
+}
+
+/** «заберёте сегодня в 12:30 · 7 мкр» / «на завтра». */
+export function orderWhen(o: Pick<Order, 'channel' | 'pickupAt' | 'deliveryDate' | 'branch'>) {
+  if (o.channel === 'CAFE' && o.pickupAt) {
+    const d = new Date(o.pickupAt);
+    const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    return `${dayLabel(o.deliveryDate).toLowerCase()} в ${time}${o.branch ? ` · ${o.branch.name}` : ''}`;
+  }
+  return `на ${dayLabel(o.deliveryDate).toLowerCase()}`;
 }
 
 export function OrderCardSkeleton() {

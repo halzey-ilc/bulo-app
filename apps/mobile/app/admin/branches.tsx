@@ -137,7 +137,7 @@ function BranchEditor({ branch, onClose, onSaved }: { branch: AdminBranch | 'new
         phone: phone.trim() || undefined,
         opensAt,
         closesAt,
-        oneCWarehouseId: wh.trim() || undefined,
+        oneCWarehouseId: wh.trim(),
         active,
         ...(point ? { lat: point.lat, lng: point.lng } : {}),
       };

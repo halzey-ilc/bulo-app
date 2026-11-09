@@ -33,8 +33,9 @@ export function addDaysIso(iso: string, days: number): string {
   return isoDay(d);
 }
 
+/** Сегодня по Бишкеку (UTC+6), а не по часовому поясу телефона. */
 export function todayIso(): string {
-  return isoDay(new Date());
+  return new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 export function dayLabel(iso: string): string {

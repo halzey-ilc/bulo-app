@@ -93,14 +93,14 @@ export class BranchesAdminController {
   @Post()
   async create(@CurrentUser() user: AuthUser, @Body() dto: CreateBranchDto) {
     const priceType = await this.prisma.priceType.create({ data: { name: `Кофейня ${dto.name}`, isRetail: true } });
-    const b = await this.prisma.branch.create({ data: { ...dto, priceTypeId: priceType.id } });
+    const b = await this.prisma.branch.create({ data: { ...dto, oneCWarehouseId: dto.oneCWarehouseId?.trim() || null, priceTypeId: priceType.id } });
     await this.audit.log(user.id, 'branch.create', 'Branch', b.id);
     return b;
   }
 
   @Patch(':id')
   async update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: BranchDto) {
-    const b = await this.prisma.branch.update({ where: { id }, data: { ...dto, oneCWarehouseId: dto.oneCWarehouseId || undefined } });
+    const b = await this.prisma.branch.update({ where: { id }, data: { ...dto, oneCWarehouseId: dto.oneCWarehouseId === undefined ? undefined : dto.oneCWarehouseId.trim() || null } });
     if (dto.name) await this.prisma.priceType.update({ where: { id: b.priceTypeId }, data: { name: `Кофейня ${dto.name}` } });
     await this.audit.log(user.id, 'branch.update', 'Branch', id, dto as object);
     return b;

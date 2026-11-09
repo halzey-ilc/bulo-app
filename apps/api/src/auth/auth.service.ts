@@ -35,6 +35,10 @@ export class AuthService {
   async requestOtp(dto: RequestOtpDto, current?: AuthUser) {
     const phone = this.phoneOrThrow(dto.phone);
     const existing = await this.prisma.user.findUnique({ where: { phone }, include: { partner: true } });
+    // регистрация — только кыргызские номера: защита от рассылки SMS на платные зарубежные номера
+    if (!existing && dto.purpose !== 'CHANGE_PHONE' && !phone.startsWith('+996')) {
+      throw new BadRequestException('Регистрация доступна для номеров Кыргызстана (+996)');
+    }
     // новый номер при входе — это гость кофейни: после кода спросим имя и создадим аккаунт
     if (dto.purpose === 'REGISTER' && existing) {
       throw new ConflictException('Этот номер уже зарегистрирован — войдите');

@@ -74,7 +74,11 @@ export class OneCPushService implements OnModuleInit, OnModuleDestroy {
         orderBy: { createdAt: 'asc' },
         take: 30,
       });
+      // если документ по заказу не прошёл, следующие по тому же заказу (реализацию, отмену) не шлём —
+      // иначе 1С получит реализацию заказа, которого у неё нет
+      const blocked = new Set<string>();
       for (const d of docs) {
+        if (d.orderId && blocked.has(d.orderId)) continue;
         try {
           const r = await this.call<{ number?: string; ok?: boolean; error?: string }>(
             'POST',
@@ -86,6 +90,7 @@ export class OneCPushService implements OnModuleInit, OnModuleDestroy {
           sent++;
         } catch (e) {
           await this.onec.ack(d.id, false, undefined, (e as Error).message);
+          if (d.orderId) blocked.add(d.orderId);
           failed++;
         }
       }

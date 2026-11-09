@@ -148,7 +148,7 @@ export function LoyaltyCard({ loyalty, onSignIn }: { loyalty?: Loyalty | null; o
           })}
         </View>
         <T v="small" color="rgba(255,255,255,0.9)" style={{ fontFamily: fonts.semibold }}>
-          {loyalty ? 'Штамп ставится за каждый кофе в брони. Подарок спишется сам.' : 'Войдите по номеру — и копите штампы за каждый кофе'}
+          {loyalty ? 'Штамп ставится за каждый кофе, когда бронь подтверждена. Подарок спишется сам.' : 'Войдите по номеру — и копите штампы за каждый кофе'}
         </T>
       </Touchable>
     </FadeIn>
@@ -166,13 +166,16 @@ export function PickupPicker({ branch, value, onChange }: { branch: Branch | nul
     if (!branch) return;
     let alive = true;
     setSlots(null);
+    setError(null);
     Catalog.slots(branch.id)
       .then((s) => {
         if (!alive) return;
         setSlots(s);
-        const d = s.today.length ? 'today' : 'tomorrow';
+        // выбранное время есть у этого филиала — оставляем, иначе (сменили филиал) берём ближайшее
+        const keep = value ? (s.today.some((x) => x.at === value) ? 'today' : s.tomorrow.some((x) => x.at === value) ? 'tomorrow' : null) : null;
+        const d = keep ?? (s.today.length ? 'today' : 'tomorrow');
         setDay(d);
-        if (!value) {
+        if (!keep) {
           const first = s[d][0];
           if (first) onChange(first);
         }

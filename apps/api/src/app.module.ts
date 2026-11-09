@@ -27,6 +27,8 @@ import { ReportsModule } from './reports/reports.module';
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',
+      // браузер не угадывает тип файла и не исполняет его как страницу
+      serveStaticOptions: { setHeaders: (res) => res.setHeader('X-Content-Type-Options', 'nosniff') },
     }),
     CommonModule,
     DeliveryModule,

@@ -129,13 +129,61 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     return id;
   }
 
-  /** Сколько кофе гость уже купил (для карты «7-й бесплатно»). */
-  async coffeeCount(userId: string) {
+  /**
+   * Сколько кофе гость уже купил (для карты «7-й бесплатно»).
+   * Считаем только подтверждённые брони: иначе можно накрутить подарок, создавая и отменяя брони.
+   */
+  async coffeeCount(userId: string, exceptOrderId?: string) {
     const r = await this.prisma.orderItem.aggregate({
       _sum: { qty: true },
-      where: { promo: true, order: { createdById: userId, channel: 'CAFE', status: { notIn: ['REJECTED', 'CANCELLED'] } } },
+      where: {
+        promo: true,
+        order: {
+          createdById: userId,
+          channel: 'CAFE',
+          confirmedAt: { not: null },
+          status: { notIn: ['REJECTED', 'CANCELLED'] },
+          ...(exceptOrderId ? { id: { not: exceptOrderId } } : {}),
+        },
+      },
     });
     return Math.floor(Number(r._sum.qty ?? 0));
+  }
+
+  /**
+   * Пересчитать подарок по акции для брони (при подтверждении или правке состава):
+   * карта гостя могла измениться с момента оформления.
+   */
+  private async repromo(orderId: string) {
+    const o = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true } });
+    if (o.channel !== 'CAFE') return;
+    const s = await this.settings.get();
+    const lines = o.items.map((i) => ({ productId: i.productId, price: Number(i.price), qty: Number(i.qty), promo: i.promo }));
+    const promo = s.promoEnabled
+      ? applyCoffeePromo(lines, await this.coffeeCount(o.createdById, o.id), s.promoEvery)
+      : { free: new Map<string, number>(), freeCount: 0, discount: 0 };
+    if (promo.freeCount === o.freeCoffees && promo.discount === Number(o.discount)) return;
+    const gross = round2(o.items.reduce((sum, i) => sum + Number(i.sum), 0));
+    await this.prisma.$transaction([
+      ...o.items.map((i) => this.prisma.orderItem.update({ where: { id: i.id }, data: { freeQty: promo.free.get(i.productId) ?? 0 } })),
+      this.prisma.order.update({
+        where: { id: orderId },
+        data: { discount: promo.discount, freeCoffees: promo.freeCount, total: round2(gross - promo.discount) },
+      }),
+    ]);
+  }
+
+  /** Перед подтверждением: хватает ли товара на складе (остатки могли уйти, пока бронь ждала). */
+  private async checkStockFor(orderId: string) {
+    const o = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true } });
+    const wh = await this.stock.warehouseFor(o);
+    const left = await this.stock.available(o.items.map((i) => i.productId), wh);
+    const short = o.items.filter((i) => left.has(i.productId) && Number(i.qty) > left.get(i.productId)!);
+    if (short.length) {
+      throw new BadRequestException(
+        `Не хватает на складе: ${short.map((i) => `«${i.name}» — осталось ${left.get(i.productId)}`).join(', ')}. Поправьте состав или отклоните`,
+      );
+    }
   }
 
   async loyalty(user: AuthUser) {
@@ -416,28 +464,32 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     if (!paymentAllowed(method, order.channel)) throw new BadRequestException('Этот способ оплаты здесь не принимается');
     // QR и перевод подтверждаем, когда деньги пришли; наличные — когда отдадут при выдаче/доставке
     const paidNow = method !== 'CASH' || dto.paid === true;
+    // товар мог закончиться, а подарок по акции — уже не положен (карта изменилась), пока бронь ждала
+    await this.checkStockFor(id);
+    await this.repromo(id);
     const now = new Date();
-    const updated = await this.prisma.order.update({
-      where: { id },
+    // атомарно: двойное нажатие или два сотрудника сразу не создадут два списания в 1С
+    const claimed = await this.prisma.order.updateMany({
+      where: { id, status: 'NEW', confirmedAt: null },
       data: {
         status: 'PAID',
         confirmedAt: now,
         confirmedById: user.id,
         paymentMethod: method,
         ...(paidNow ? { paidAt: now, paidById: user.id } : {}),
-        history: {
-          create: {
-            from: 'NEW',
-            to: 'PAID',
-            userId: user.id,
-            comment:
-              dto.comment ??
-              (paidNow ? `Оплата получена: ${PAYMENT_LABELS[method]}` : 'Подтверждён, оплата наличными при получении'),
-          },
-        },
       },
-      include: orderInclude,
     });
+    if (claimed.count !== 1) throw new BadRequestException('Заказ уже подтвердил другой сотрудник');
+    await this.prisma.orderStatusHistory.create({
+      data: {
+        orderId: id,
+        from: 'NEW',
+        to: 'PAID',
+        userId: user.id,
+        comment: dto.comment ?? (paidNow ? `Оплата получена: ${PAYMENT_LABELS[method]}` : 'Подтверждён, оплата наличными при получении'),
+      },
+    });
+    const updated = await this.prisma.order.findUniqueOrThrow({ where: { id }, include: orderInclude });
     await this.audit.log(user.id, 'order.confirm', 'Order', id, { paymentMethod: method, paid: paidNow });
     // списание в 1С
     await this.outbox.enqueueOrder(id, 'CUSTOMER_ORDER');
@@ -476,7 +528,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       order.channel === 'CAFE' && order.branch
         ? order.branch.priceTypeId
         : await this.defaultPriceTypeId(order.partner?.priceTypeId ?? null);
-    const { lines, total } = await this.priceItems(priceTypeId, items, null);
+    const { lines, total } = await this.priceItems(priceTypeId, items, await this.stock.warehouseFor(order));
     const updated = await this.prisma.$transaction(async (tx) => {
       await tx.orderItem.deleteMany({ where: { orderId: id } });
       return tx.order.update({
@@ -498,6 +550,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         include: orderInclude,
       });
     });
+    // бронь кофейни: подарок по акции не теряем — пересчитываем по новому составу
+    if (order.channel === 'CAFE') {
+      await this.repromo(id);
+      const fresh = await this.prisma.order.findUniqueOrThrow({ where: { id }, include: orderInclude });
+      Object.assign(updated, fresh);
+    }
     await this.audit.log(user.id, 'order.edit_items', 'Order', id, {
       before: order.items.map((i) => ({ productId: i.productId, qty: Number(i.qty) })),
       after: lines.map((l) => ({ productId: l.productId, qty: l.qty })),
@@ -526,8 +584,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
   /** Отметить, что деньги получены (наличные при доставке/выдаче или запоздалый перевод). */
   async markPaid(user: AuthUser, id: string, paymentMethod?: string, comment?: string) {
-    const order = await this.prisma.order.findUnique({ where: { id } });
+    const order = await this.prisma.order.findFirst({ where: this.scope(user, { id }) });
     if (!order) throw new NotFoundException('Заказ не найден');
+    // кассир отмечает оплату только броней кофейни, оптовые заказы — админ, менеджер, бухгалтер
+    if (!canConfirm(user.role, order.channel)) throw new ForbiddenException('Отмечать оплату может админ, менеджер или бухгалтер');
     if (order.status === 'REJECTED' || order.status === 'CANCELLED') {
       throw new BadRequestException('Заказ отменён — оплату отметить нельзя');
     }
@@ -537,18 +597,16 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     if (order.status === 'NEW' && !order.confirmedAt) {
       return this.confirm(user, id, { paymentMethod: method as PaymentMethod | undefined, paid: true, comment });
     }
-    const updated = await this.prisma.order.update({
-      where: { id },
-      data: {
-        paidAt: new Date(),
-        paidById: user.id,
-        paymentMethod: method ?? order.paymentMethod ?? 'CASH',
-        history: {
-          create: { from: order.status, to: order.status, userId: user.id, comment: comment || 'Оплата получена' },
-        },
-      },
-      include: orderInclude,
+    // атомарно: повторное нажатие не создаст вторую отметку
+    const claimed = await this.prisma.order.updateMany({
+      where: { id, paidAt: null },
+      data: { paidAt: new Date(), paidById: user.id, paymentMethod: method ?? order.paymentMethod ?? 'CASH' },
     });
+    if (claimed.count !== 1) throw new BadRequestException('Оплата уже отмечена');
+    await this.prisma.orderStatusHistory.create({
+      data: { orderId: id, from: order.status, to: order.status, userId: user.id, comment: comment || 'Оплата получена' },
+    });
+    const updated = await this.prisma.order.findUniqueOrThrow({ where: { id }, include: orderInclude });
     await this.audit.log(user.id, 'order.paid', 'Order', id, { paymentMethod: method ?? null });
     await this.notifications.toUsers([order.createdById], {
       title: `Заказ №${order.number}`,
@@ -642,6 +700,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         channel: 'CAFE',
         status: { in: ['NEW', 'PAID', 'READY'] },
         paidAt: null,
+        // гость сообщил, что оплатил по QR, — такую бронь не снимаем, пусть проверит менеджер
+        paymentClaimedAt: null,
         deliveryDate: { lte: toDbDate(today.date) },
       },
       include: { branch: true },

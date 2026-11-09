@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Role } from '@prisma/client';
+import { sendFcm } from './fcm';
 import { PrismaService } from './prisma.service';
 
 interface Message {
@@ -22,10 +23,18 @@ export class NotificationsService {
       data: ids.map((userId) => ({ userId, ...msg })),
     });
     const tokens = await this.prisma.pushToken.findMany({ where: { userId: { in: ids } } });
-    await this.sendPush(
-      tokens.map((t) => t.token),
-      msg,
-    );
+    // Android — напрямую через Firebase, остальное (iOS / Expo Go) — через Expo
+    const fcm = tokens.filter((t) => t.platform === 'fcm').map((t) => t.token);
+    const expo = tokens.filter((t) => t.platform !== 'fcm').map((t) => t.token);
+    await this.sendPush(expo, msg);
+    if (fcm.length) {
+      try {
+        const dead = await sendFcm(fcm, msg);
+        if (dead.length) await this.prisma.pushToken.deleteMany({ where: { token: { in: dead } } });
+      } catch (e) {
+        this.logger.warn(`FCM push не отправлен: ${(e as Error).message}`);
+      }
+    }
   }
 
   async toRoles(roles: Role[], msg: Message) {

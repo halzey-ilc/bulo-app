@@ -4,8 +4,8 @@ import { SettingsService } from './settings.service';
 
 /**
  * Остатки. Источник правды — 1С: она присылает остатки по складам (или мы забираем их сами).
- * Свободный остаток = остаток 1С минус подтверждённые заказы, которые 1С ещё не приняла
- * (их документ в очереди). Как только 1С подтвердила документ, он уже учтён в её остатках.
+ * Свободный остаток = остаток 1С минус подтверждённые заказы, которые ещё не учтены в её остатках:
+ * документ в очереди или принят 1С позже, чем она присылала остатки.
  * Если по товару остатков из 1С нет — считаем, что ограничения нет.
  */
 @Injectable()
@@ -31,6 +31,8 @@ export class StockService {
     const rows = await this.prisma.stock.findMany({ where: { warehouseId, productId: { in: productIds } } });
     if (!rows.length) return out;
     for (const r of rows) out.set(r.productId, Number(r.qty));
+    // когда 1С в последний раз присылала остатки этого склада: документы, принятые ею позже, в них ещё не учтены
+    const lastImport = (await this.prisma.stock.aggregate({ where: { warehouseId }, _max: { updatedAt: true } }))._max.updatedAt ?? new Date(0);
 
     const settings = await this.settings.get();
     const branch = await this.prisma.branch.findUnique({ where: { oneCWarehouseId: warehouseId }, select: { id: true } });
@@ -42,7 +44,12 @@ export class StockService {
         order: {
           confirmedAt: { not: null },
           status: { notIn: ['REJECTED', 'CANCELLED'] },
-          oneCDocs: { some: { type: 'CUSTOMER_ORDER', status: { in: ['PENDING', 'ERROR'] } } },
+          oneCDocs: {
+            some: {
+              type: 'CUSTOMER_ORDER',
+              OR: [{ status: { in: ['PENDING', 'ERROR'] } }, { status: 'SENT', sentAt: { gt: lastImport } }],
+            },
+          },
           OR: [
             ...(branch ? [{ branchId: branch.id }] : []),
             ...(settings.workshopWarehouseId === warehouseId ? [{ channel: 'PARTNER' as const }] : []),

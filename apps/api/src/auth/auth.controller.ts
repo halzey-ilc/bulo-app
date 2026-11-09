@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, HttpException, HttpStatus, Ip, Param, Patch, Post } from '@nestjs/common';
 import { AuthUser, publicUser } from '../common/auth-user';
 import { CurrentUser, Public, Roles } from '../common/decorators';
 import { PrismaService } from '../common/prisma.service';
@@ -23,9 +23,22 @@ export class AuthController {
     private readonly prisma: PrismaService,
   ) {}
 
+  /** Сколько кодов уже запросили: с одного адреса и всего за час — защита от массовой рассылки SMS. */
+  private otpHits = new Map<string, number[]>();
+  private otpHour: number[] = [];
+
   @Public()
   @Post('otp')
-  requestOtp(@Body() dto: RequestOtpDto, @CurrentUser() user?: AuthUser) {
+  requestOtp(@Body() dto: RequestOtpDto, @Ip() ip: string, @CurrentUser() user?: AuthUser) {
+    const now = Date.now();
+    const recent = (this.otpHits.get(ip) ?? []).filter((t) => now - t < 10 * 60_000);
+    this.otpHour = this.otpHour.filter((t) => now - t < 60 * 60_000);
+    if (recent.length >= 5) throw new HttpException('Слишком много запросов кода. Попробуйте через 10 минут', HttpStatus.TOO_MANY_REQUESTS);
+    if (this.otpHour.length >= 300) throw new HttpException('Сервис входа перегружен, попробуйте чуть позже', HttpStatus.TOO_MANY_REQUESTS);
+    recent.push(now);
+    this.otpHits.set(ip, recent);
+    this.otpHour.push(now);
+    if (this.otpHits.size > 5000) this.otpHits.clear();
     return this.auth.requestOtp(dto, user);
   }
 

@@ -17,7 +17,7 @@ import {
 import { AnimatedSplash } from '../src/components/AnimatedSplash';
 import { DialogHost, FlyToCartHost, ToastHost } from '../src/components/Overlays';
 import { cacheStats, clearCache } from '../src/lib/cache';
-import { registerPushToken } from '../src/lib/push';
+import { listenPushTaps, registerPushToken } from '../src/lib/push';
 import { repriceCart, warmUp } from '../src/lib/queries';
 import { personaOf, useAuth } from '../src/store/auth';
 import { prefsHydrated, usePrefs } from '../src/store/prefs';
@@ -65,7 +65,10 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (userId) void registerPushToken();
+    if (userId) {
+      void registerPushToken();
+      void listenPushTaps();
+    }
   }, [userId]);
 
   // Прогрев кэша сразу после проверки сессии — пока идёт заставка, каталог уже грузится.

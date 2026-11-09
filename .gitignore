@@ -12,3 +12,11 @@ npm-debug.log*
 .DS_Store
 ios/
 android/
+
+# Ключи Firebase и подписи — только вне репозитория
+*firebase-adminsdk*.json
+service-account*.json
+*.jks
+*.keystore
+google-services.json
+GoogleService-Info.plist

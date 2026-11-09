@@ -1,13 +1,16 @@
 import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     // имя файла Excel-выгрузки браузер читает из Content-Disposition
     cors: { exposedHeaders: ['Content-Disposition'] },
   });
+  // за туннелем/прокси (Cloudflare, nginx) настоящий адрес клиента — в X-Forwarded-For
+  app.set('trust proxy', 'loopback, linklocal, uniquelocal');
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, transform: true, forbidUnknownValues: false }),

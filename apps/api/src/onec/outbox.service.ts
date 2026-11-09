@@ -17,6 +17,9 @@ export class OutboxService {
   ) {}
 
   async enqueueOrder(orderId: string, type: Extract<OneCDocType, 'CUSTOMER_ORDER' | 'SALE' | 'CANCEL'>) {
+    // каждый документ по заказу — один раз: повтор не должен списать товар в 1С дважды
+    const existing = await this.prisma.oneCDocument.findFirst({ where: { orderId, type } });
+    if (existing) return existing;
     const o = await this.prisma.order.findUniqueOrThrow({
       where: { id: orderId },
       include: {

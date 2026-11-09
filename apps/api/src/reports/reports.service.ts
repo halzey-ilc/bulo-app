@@ -84,7 +84,8 @@ export class ReportsService {
       for (const i of o.items) {
         const pr = byProduct.get(i.productId) ?? { productId: i.productId, name: i.name, unit: i.unit, qty: 0, total: 0 };
         pr.qty += Number(i.qty);
-        pr.total += Number(i.sum);
+        // подаренный по акции кофе выручкой не считаем
+        pr.total += Number(i.sum) - i.freeQty * Number(i.price);
         byProduct.set(i.productId, pr);
       }
     }
@@ -133,7 +134,8 @@ export class ReportsService {
   /** Кто должен: подтверждённые, но не оплаченные заказы (наличные при доставке). */
   async debts() {
     const orders = await this.prisma.order.findMany({
-      where: { status: { notIn: ['REJECTED', 'CANCELLED'] }, paidAt: null },
+      // долг — это подтверждённый, но не оплаченный заказ; неподтверждённые ещё ждут оплаты
+      where: { status: { notIn: ['REJECTED', 'CANCELLED'] }, paidAt: null, confirmedAt: { not: null } },
       include: { partner: true, createdBy: { select: { name: true, phone: true } } },
       orderBy: { deliveryDate: 'asc' },
     });
@@ -235,7 +237,7 @@ export class ReportsService {
         unit: i.unit,
         qty: Number(i.qty),
         price: Number(i.price),
-        sum: Number(i.sum),
+        sum: Number(i.sum) - i.freeQty * Number(i.price),
       })),
     );
     const buffer = await this.excel.build([

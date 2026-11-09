@@ -565,14 +565,16 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   async transition(
     orderId: string,
     to: OrderStatus,
-    user: AuthUser,
+    /** null — действие системы (например, автоотмена брони) */
+    user: AuthUser | null,
     extra: { comment?: string; productionSheetId?: string; receivedBy?: string; cashReceived?: boolean } = {},
   ) {
     const now = new Date();
+    const uid = user?.id ?? null;
     const before = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
     const data: Prisma.OrderUpdateInput = {
       status: to,
-      history: { create: { from: before.status, to, userId: user.id, comment: extra.comment } },
+      history: { create: { from: before.status, to, userId: uid, comment: extra.comment } },
     };
     if (to === 'REJECTED' || to === 'CANCELLED') data.rejectReason = extra.comment;
     if (to === 'IN_PRODUCTION' && extra.productionSheetId) {
@@ -580,7 +582,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     }
     if (to === 'SHIPPED') {
       data.shippedAt = now;
-      if (user.role === 'COURIER') data.courier = { connect: { id: user.id } };
+      if (user?.role === 'COURIER') data.courier = { connect: { id: user.id } };
     }
     if (to === 'DELIVERED') {
       data.deliveredAt = now;
@@ -588,12 +590,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       // наличные: при выдаче гостю или доставке партнёру деньги получены
       if (!before.paidAt && before.paymentMethod === 'CASH' && (before.channel === 'CAFE' || extra.cashReceived)) {
         data.paidAt = now;
-        data.paidById = user.id;
+        data.paidById = uid;
       }
     }
 
     const order = await this.prisma.order.update({ where: { id: orderId }, data, include: orderInclude });
-    await this.audit.log(user.id, `order.${to.toLowerCase()}`, 'Order', orderId, {
+    await this.audit.log(uid, `order.${to.toLowerCase()}`, 'Order', orderId, {
       from: before.status,
       comment: extra.comment ?? null,
     });
@@ -644,15 +646,14 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       },
       include: { branch: true },
     });
-    const system = await this.prisma.user.findFirst({ where: { role: 'ADMIN' } });
-    if (!system) return 0;
     let n = 0;
     for (const o of stale) {
       const day = o.deliveryDate.toISOString().slice(0, 10);
       const closes = localToDate(day, o.branch?.closesAt ?? '22:00');
       // через час после закрытия
       if (now.getTime() < closes.getTime() + 60 * 60_000) continue;
-      await this.transition(o.id, 'CANCELLED', system as AuthUser, { comment: 'Бронь не забрали' });
+      // отменяет система, а не конкретный сотрудник
+      await this.transition(o.id, 'CANCELLED', null, { comment: 'Бронь не забрали — снята автоматически после закрытия' });
       n++;
     }
     if (n) this.logger.log(`Снято броней, которые не забрали: ${n}`);

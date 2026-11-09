@@ -242,7 +242,7 @@ export function OfficeDashboard() {
               tone="yellow"
               value={d.awaitingPayment.count}
               label="Не оплачены"
-              sub={d.awaitingPayment.count ? `${money(d.awaitingPayment.total)} · наличные` : 'Долгов нет'}
+              sub={d.awaitingPayment.count ? money(d.awaitingPayment.total) : "Долгов нет"}
               onPress={() => go('debt')}
             />
             <KpiCard

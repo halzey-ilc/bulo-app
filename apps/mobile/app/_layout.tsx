@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform, View } from 'react-native';
-import { router, Stack } from 'expo-router';
+import { router, Stack, usePathname } from 'expo-router';
+import { ErrorBoundary } from '../src/components/ErrorBoundary';
+import { installCrashHandler, setCrashScreen } from '../src/lib/crash';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -42,7 +44,11 @@ export default function RootLayout() {
   const prevUser = useRef<string | undefined>(undefined);
   const onboardingChecked = useRef(false);
 
+  const pathname = usePathname();
+  useEffect(() => setCrashScreen(pathname), [pathname]);
+
   useEffect(() => {
+    installCrashHandler();
     void useAuth.getState().bootstrap();
   }, []);
 
@@ -99,6 +105,7 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       <View style={{ flex: 1, backgroundColor: colors.bg }}>
         {ready && (
+          <ErrorBoundary>
           <Stack
             screenOptions={{
               headerShown: false,
@@ -113,6 +120,7 @@ export default function RootLayout() {
             <Stack.Screen name="onboarding" options={{ animation: 'fade', gestureEnabled: false }} />
             <Stack.Screen name="order-success" options={{ animation: 'fade', gestureEnabled: false }} />
           </Stack>
+          </ErrorBoundary>
         )}
         <FlyToCartHost />
         <ToastHost />

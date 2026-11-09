@@ -5,6 +5,7 @@ import { useCart } from '../store/cart';
 import { usePrefs } from '../store/prefs';
 import { toast } from '../store/ui';
 import { fetchCached, invalidate } from './cache';
+import { bishkekTime } from './format';
 import { Q, repriceCart, useQuery } from './queries';
 
 /** Гость кофейни (или ещё не вошёл) — видит меню филиала; партнёр — оптовый каталог. */
@@ -59,6 +60,6 @@ export async function switchBranch(b: Branch) {
 
 /** «08:00–22:00» и открыт ли сейчас. */
 export function branchHours(b: Pick<Branch, 'opensAt' | 'closesAt'>, now = new Date()) {
-  const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const hm = bishkekTime(now);
   return { text: `${b.opensAt}–${b.closesAt}`, open: hm >= b.opensAt && hm < b.closesAt };
 }

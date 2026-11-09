@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import type { Order } from '../api';
-import { dayLabel, money, plural } from '../lib/format';
+import { bishkekTime, dayLabel, money, plural } from '../lib/format';
 import { Channel, flowOf, OrderStatus, statusLabel } from '../shared';
 import { colors, fonts, radius, space } from '../theme';
 import { Icon, IconName } from './Icon';
@@ -121,7 +121,7 @@ export function orderTitle(o: Pick<Order, 'channel' | 'number'>) {
 export function orderWhen(o: Pick<Order, 'channel' | 'pickupAt' | 'deliveryDate' | 'branch'>) {
   if (o.channel === 'CAFE' && o.pickupAt) {
     const d = new Date(o.pickupAt);
-    const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    const time = bishkekTime(d);
     return `${dayLabel(o.deliveryDate).toLowerCase()} в ${time}${o.branch ? ` · ${o.branch.name}` : ''}`;
   }
   return `на ${dayLabel(o.deliveryDate).toLowerCase()}`;

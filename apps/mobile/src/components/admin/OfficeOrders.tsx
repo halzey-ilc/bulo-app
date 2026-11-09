@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { errorMessage, Orders } from '../../api';
 import { Admin, OfficeOrder } from '../../api/admin';
 import { addDaysIso, dateChip, dayLabel, money, plural, todayIso } from '../../lib/format';
-import { runConfirm, runMarkPaid } from '../../lib/orderActions';
+import { runConfirm, runMarkPaid, runOrderAction } from '../../lib/orderActions';
 import { useLoad } from '../../lib/useLoad';
 import { useAuth } from '../../store/auth';
 import { toast } from '../../store/ui';
@@ -136,6 +136,13 @@ export function OfficeOrders({ stack }: { stack?: boolean }) {
       if (a === 'CONFIRM') return runConfirm(o, (u) => done(u as OfficeOrder));
       if (a === 'MONEY') return runMarkPaid(o, (u) => done(u as OfficeOrder));
       if (a === 'REJECTED' || a === 'CANCELLED') return setRejecting({ o, cancel: a === 'CANCELLED' });
+      // выдача/доставка за наличные — с напоминанием взять деньги
+      if (a === 'DELIVERED' && o.paymentMethod === 'CASH' && !o.paidAt) {
+        return runOrderAction(o, a, (u) => {
+          list.setData((cur) => (cur ?? []).filter((x) => x.id !== u.id || !filter.statuses || filter.statuses.includes(u.status)).map((x) => (x.id === u.id ? (u as OfficeOrder) : x)));
+          dash.reload();
+        });
+      }
       change(o, a).catch(() => {});
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps

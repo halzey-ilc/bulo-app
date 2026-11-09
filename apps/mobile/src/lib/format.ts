@@ -104,3 +104,10 @@ export function deliveryPhrase(iso: string): string {
   const label = dayLabel(iso);
   return /^[0-9]/.test(label) ? dateLong(iso) : `${label.toLowerCase()}, ${dateLong(iso)}`;
 }
+
+/** Бишкек живёт по UTC+6 без перехода на летнее время: время брони и часы филиала считаем так, а не по часовому поясу телефона. */
+const BISHKEK_OFFSET_MS = 6 * 60 * 60 * 1000;
+export function bishkekTime(at: string | number | Date): string {
+  const d = new Date(new Date(at).getTime() + BISHKEK_OFFSET_MS);
+  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+}

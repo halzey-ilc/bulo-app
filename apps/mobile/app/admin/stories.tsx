@@ -51,7 +51,7 @@ export default function StoriesAdmin() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <Header title="Истории" subtitle="Кружки на главной экране" />
+      <Header title="Истории" subtitle="Кружки на главном экране" />
       <Screen refreshing={list.refreshing} onRefresh={list.refresh} contentStyle={{ paddingBottom: 140 }}>
         <Note text="Новые истории показываются первыми с цветным кольцом. Кроме ваших, приложение само собирает истории из новинок и меню." />
         {list.loading ? (
